@@ -1,0 +1,120 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Forbind til din Danfoss Link CC",
+        "description": "Home Assistant forbinder gennem Danfoss-skyen på samme måde som Danfoss Link-appen. Hvordan vil du sætte det op?",
+        "menu_options": {
+          "pair": "Par med koden fra CC'en",
+          "credentials": "Brug eksporterede app-legitimationsoplysninger"
+        }
+      },
+      "pair": {
+        "title": "Par med din Danfoss Link CC",
+        "description": "Start parring af en ny app på CC'en (som da du parrede din telefon), og indtast den kode, den viser. Home Assistant parres som sin egen app, adskilt fra Danfoss Link-appen på din telefon. CC'en skal være forbundet til internettet.",
+        "data": {
+          "code": "Parringskode"
+        },
+        "data_description": {
+          "code": "Koden, der vises på CC'ens skærm. Bindestreger og mellemrum ignoreres."
+        }
+      },
+      "verify": {
+        "title": "Parret, men kan ikke forbinde endnu",
+        "description": "Home Assistant er nu parret med CC'en, men den første forbindelse mislykkedes. Send igen for at prøve en gang til; du behøver ikke en ny kode."
+      },
+      "credentials": {
+        "title": "Brug eksporterede app-legitimationsoplysninger",
+        "description": "Home Assistant forbinder på samme måde som Danfoss Link-appen og har derfor brug for appens identitet. Eksportér den én gang fra en parret Android-app (se README), og indsæt filerne her. Du kan også angive en sti til filen i forhold til din Home Assistant-konfigurationsmappe. Luk Danfoss Link-appen, mens Home Assistant er forbundet.",
+        "data": {
+          "cert_pem": "App-certifikat (app_cert.pem)",
+          "key_pem": "Appens private nøgle (app_key.pem)",
+          "peer_id": "CC'ens peer-ID"
+        },
+        "data_description": {
+          "cert_pem": "Starter med -----BEGIN CERTIFICATE-----",
+          "key_pem": "Starter med -----BEGIN PRIVATE KEY----- eller -----BEGIN EC PRIVATE KEY-----",
+          "peer_id": "20 bytes hex fra appens pairings-mappe, f.eks. e7:af:e3:77:..."
+        }
+      },
+      "reconfigure": {
+        "title": "Opdatér Danfoss Link-legitimationsoplysninger",
+        "description": "Indsæt nyligt eksporterede legitimationsoplysninger, f.eks. efter at appen er parret igen.",
+        "data": {
+          "cert_pem": "App-certifikat (app_cert.pem)",
+          "key_pem": "Appens private nøgle (app_key.pem)",
+          "peer_id": "CC'ens peer-ID"
+        }
+      }
+    },
+    "error": {
+      "invalid_credentials": "Certifikatet, den private nøgle eller peer-ID'et kunne ikke læses, eller nøglen hører ikke til certifikatet.",
+      "cc_offline": "Danfoss-skyen accepterede legitimationsoplysningerne, men din CC er ikke online eller kender ikke denne app. Kontrollér, at CC'en er forbundet til internettet, og at peer-ID'et er korrekt.",
+      "cannot_connect": "Kunne ikke forbinde gennem Danfoss-skyen. Sørg for, at Danfoss Link-appen med disse legitimationsoplysninger er lukket, og prøv igen.",
+      "unknown": "Uventet fejl, se loggen for detaljer.",
+      "invalid_code": "Det er ikke en parringskode. Indtast koden præcis, som CC'en viser den.",
+      "lan_code": "Koder, der starter med 0000, er til parring på det lokale netværk, som denne integration ikke understøtter endnu. Kun koder til parring gennem Danfoss-skyen virker.",
+      "wrong_code": "CC'en afviste koden. Kontrollér den og prøv igen, eller start parringen forfra på CC'en.",
+      "code_expired": "Ingen CC venter på denne kode. Den kan være udløbet eller tastet forkert; start parringen forfra på CC'en, og indtast den nye kode.",
+      "pairing_timeout": "CC'en holdt op med at svare under parringen. Kontrollér, at den er online, og prøv igen med en ny kode."
+    },
+    "abort": {
+      "already_configured": "Denne CC er allerede konfigureret.",
+      "reconfigure_successful": "Legitimationsoplysningerne er opdateret.",
+      "wrong_cc": "Disse legitimationsoplysninger hører til en anden CC."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Opdateringsinterval"
+        },
+        "data_description": {
+          "scan_interval": "Hvor ofte CC'en skal aflæses. Hver aflæsning går gennem Danfoss-skyen."
+        }
+      }
+    }
+  },
+  "entity": {
+    "climate": {
+      "room": {
+        "state_attributes": {
+          "hvac_mode": {
+            "state": {
+              "auto": "Ugeprogram",
+              "heat": "Manuel"
+            }
+          }
+        }
+      }
+    },
+    "number": {
+      "at_home_setpoint": {
+        "name": "Hjemmetemperatur"
+      },
+      "away_setpoint": {
+        "name": "Udetemperatur"
+      },
+      "vacation_temperature": {
+        "name": "Ferietemperatur"
+      }
+    },
+    "select": {
+      "house_mode": {
+        "name": "Husets tilstand",
+        "state": {
+          "at_home": "Hjemme",
+          "vacation": "Ferie",
+          "pause": "Pause",
+          "boost": "Boost"
+        }
+      }
+    },
+    "sensor": {
+      "alarms": {
+        "name": "Ulæste alarmer"
+      }
+    }
+  }
+}
