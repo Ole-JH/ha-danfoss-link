@@ -76,9 +76,9 @@ token } }` → open a new connection to a router and send
 Remote pairing: `allocate_pairing_channel` / `place_pairing_call { pair_id }`
 on the control connection, then the PACE exchange below on the routed stream.
 
-The exact outer framing of these protobufs on the TLS stream (length prefix
-and tag byte) is in `mdg_control_connection` / `mdg_multiplexer` and still
-needs to be written down.
+Framing on every stream: `[u16 big-endian length][payload]`; control, routing and pairing payloads are `[u8 message tag][protobuf]`. Full client walkthrough (TLS profile, handshake properties, timers, routed TLS session, `cc_json` response envelope, LAN port 14641) is in [connection-spec.md](connection-spec.md).
+
+**TLS quirk:** the app's bundled OpenSSL 1.0.2s is patched to advertise brainpoolP320r1 under TLS curve ID 29, which standard TLS assigns to x25519. Stock Python `ssl`/OpenSSL 3 therefore cannot talk to the grid or the CC; the client needs a small custom TLS 1.2 implementation for `ECDHE-ECDSA-*` on brainpoolP320r1.
 
 ### Pairing: PACE (answers open question 2, mostly)
 
