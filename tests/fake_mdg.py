@@ -90,8 +90,9 @@ def initial_state() -> dict[str, Any]:
         "/api/system/info": {"name": "My home", "serialNo": "123456", "version": "4.2.1797"},
         "/api/system/status": {"currentState": "AtHome"},
         "/api/rooms": copy.deepcopy(ROOMS),
+        # Following the schedule: no mode is active (as on a real CC).
         "/api/modes": [
-            {"type": "AtHome", "state": "Active"},
+            {"type": "AtHome", "state": "Inactive"},
             {"type": "Vacation", "state": "Inactive"},
             {"type": "Pause", "state": "Inactive"},
         ],

@@ -104,6 +104,7 @@
       "house_mode": {
         "name": "House mode",
         "state": {
+          "schedule": "Schedule",
           "at_home": "At home",
           "vacation": "Vacation",
           "pause": "Pause",
@@ -121,6 +122,17 @@
     "sensor": {
       "alarms": {
         "name": "Unread alarms"
+      },
+      "house_state": {
+        "name": "House state",
+        "state": {
+          "at_home": "At home",
+          "away": "Away",
+          "asleep": "Asleep",
+          "vacation": "Vacation",
+          "pause": "Pause",
+          "boost": "Boost"
+        }
       }
     }
   }

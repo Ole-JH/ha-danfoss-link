@@ -221,7 +221,10 @@ async def test_setup_creates_entities(hass: HomeAssistant, fake: FakeMDG) -> Non
     alarms = hass.states.get("sensor.my_home_unread_alarms")
     assert alarms.state == "1"
     assert alarms.attributes["alarms"][0]["room"] == "Bathroom"
-    assert hass.states.get("select.my_home_house_mode").state == "at_home"
+    house_mode = hass.states.get("select.my_home_house_mode")
+    assert house_mode.state == "schedule"
+    assert house_mode.attributes["options"] == ["schedule", "at_home", "vacation", "pause"]
+    assert hass.states.get("sensor.my_home_house_state").state == "at_home"
     assert hass.states.get("select.living_room_mode").state == "schedule"
     assert hass.states.get("select.bathroom_mode").state == "manual"
     assert hass.states.get("switch.my_home_towel_rail").state == "off"
@@ -342,6 +345,18 @@ async def test_house_mode(hass: HomeAssistant, fake: FakeMDG) -> None:
         ("PUT", "/api/modes/vacation", {"type": "Vacation", "state": "Inactive"}),
         ("PUT", "/api/modes/athome", {"type": "AtHome", "state": "Active", "rooms": [0, 1]}),
     ]
+    await hass.async_block_till_done()
+    assert hass.states.get(entity).state == "at_home"
+
+    fake.requests.clear()
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: entity, "option": "schedule"},
+        blocking=True,
+    )  # fmt: skip
+    writes = [r for r in fake.requests if r[0] != "GET"]
+    assert writes == [("PUT", "/api/modes/athome", {"type": "AtHome", "state": "Inactive"})]
+    await hass.async_block_till_done()
+    assert hass.states.get(entity).state == "schedule"
 
 
 async def test_switch_and_numbers(hass: HomeAssistant, fake: FakeMDG) -> None:

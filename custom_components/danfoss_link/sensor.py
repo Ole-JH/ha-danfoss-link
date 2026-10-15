@@ -31,6 +31,8 @@ async def async_setup_entry(
         if "ambientTemperature" in room
     ]
     entities.append(DanfossLinkAlarms(coordinator))
+    if coordinator.data.status.get("currentState"):
+        entities.append(DanfossLinkHouseState(coordinator))
     async_add_entities(entities)
 
 
@@ -47,6 +49,34 @@ class DanfossLinkRoomTemperature(DanfossLinkRoomEntity, SensorEntity):
     @property
     def native_value(self) -> float | None:
         return self.room.get("ambientTemperature")
+
+
+# CC system state (/api/system/status currentState) -> option key
+_HOUSE_STATES = {
+    "AtHome": "at_home",
+    "Away": "away",
+    "Asleep": "asleep",
+    "Vacation": "vacation",
+    "Pause": "pause",
+    "Boost": "boost",
+}
+
+
+class DanfossLinkHouseState(DanfossLinkEntity, SensorEntity):
+    """What the CC is doing now, e.g. the schedule's at home / away / asleep period."""
+
+    _attr_translation_key = "house_state"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = list(_HOUSE_STATES.values())
+
+    def __init__(self, coordinator: DanfossLinkCoordinator) -> None:
+        super().__init__(coordinator, "house_state")
+
+    @property
+    def native_value(self) -> str | None:
+        # The app ignores anything after a comma ("AtHome,..." while overridden).
+        state = (self.coordinator.data.status.get("currentState") or "").split(",")[0]
+        return _HOUSE_STATES.get(state)
 
 
 class DanfossLinkAlarms(DanfossLinkEntity, SensorEntity):

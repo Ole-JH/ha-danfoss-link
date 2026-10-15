@@ -50,7 +50,8 @@ up, and [Troubleshooting](#troubleshooting) if a step fails.
 | `sensor` temperature | room | Room temperature for history/statistics |
 | `select` mode | room | **Schedule** / **Manual**, the same setting as the thermostat's Auto/Heat, for dashboards and automations |
 | `number` at-home / away temperature | room | The two temperatures the schedule switches between |
-| `select` house mode | CC | At home / Vacation / Pause (/ Boost if your CC has it) |
+| `select` house mode | CC | Schedule (no override) / At home / Vacation / Pause (/ Boost if your CC has it) |
+| `sensor` house state | CC | What the CC is doing now: at home / away / asleep from the schedule, or the active mode |
 | `number` vacation temperature | CC | Temperature used in vacation mode |
 | `switch` | on/off device | Link on/off outputs |
 | `sensor` unread alarms | CC | Count plus details (low battery, lost device, ...) |

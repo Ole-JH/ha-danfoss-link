@@ -185,6 +185,30 @@ content such as:
 `setpoint.temperature` changes the current period only (matches CC firmware
 4.0.36 release note); `atHomeSetpoint` changes the comfort temperature.
 
+House modes (`GetModesResponse`, `PutModesRequest`, `GetSystemStatusResponse`
+in APK 1.3.10):
+
+```
+GET api/modes        -> [ {type, state, startTime?, endTime?, rooms?}, ... ]
+PUT api/modes/{athome|vacation|pause|boost}
+                     <- {type, state, startTime?, endTime?, rooms?}
+type   AtHome | Vacation | Pause | Boost   (PUT supports only these four)
+state  Active | Inactive | Planned
+rooms  [int]  -- sent only with AtHome + Active
+GET api/system/status -> {currentState, outdoorTemperature?, schedule, normalSchedule}
+currentState  AtHome | Away | Asleep | Vacation | Pause | Boost | ...
+              (app keeps only the part before a comma)
+```
+
+A mode is an override. While the CC simply follows its weekly schedule every
+mode is `Inactive` (inferred on Ole's CC, firmware 4.2.1724: HA showed "unknown"
+while the app showed "At Home"). The "At Home" text in the app's dial is
+`currentState`, i.e. the schedule's current period; `AtHome` in `api/modes`
+is the separate "home now" button. The integration therefore shows
+**Schedule** when no mode is active, ends an `AtHome` override with
+`{"type": "AtHome", "state": "Inactive"}`, and exposes `currentState` as a
+House state sensor.
+
 ### Reconstructed protobuf schemas
 
 Reconstructed from the descriptor tables in `mdg_*_pb.lua` (field names,

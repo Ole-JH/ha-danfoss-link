@@ -22,6 +22,8 @@ PARALLEL_UPDATES = 1
 # CC mode type -> option key (translated in strings.json)
 _OPTIONS = {"AtHome": "at_home", "Vacation": "vacation", "Pause": "pause", "Boost": "boost"}
 _TYPES = {v: k for k, v in _OPTIONS.items()}
+# No mode active: the CC follows its weekly schedule (the app's normal state).
+_SCHEDULE = "schedule"
 
 # Room regulation type -> option key; same setting as the climate entity's auto/heat.
 _REGULATION_OPTIONS = {REGULATION_SCHEDULE: "schedule", REGULATION_MANUAL: "manual"}
@@ -53,7 +55,9 @@ class DanfossLinkHouseMode(DanfossLinkEntity, SelectEntity):
     @property
     def options(self) -> list[str]:
         types = {mode.get("type") for mode in self.coordinator.data.modes}
-        return [option for mode_type, option in _OPTIONS.items() if mode_type in types]
+        return [_SCHEDULE] + [
+            option for mode_type, option in _OPTIONS.items() if mode_type in types
+        ]
 
     def _active_type(self) -> str | None:
         active = [
@@ -68,21 +72,25 @@ class DanfossLinkHouseMode(DanfossLinkEntity, SelectEntity):
         return active[0] if active else None
 
     @property
-    def current_option(self) -> str | None:
+    def current_option(self) -> str:
         active = self._active_type()
-        return _OPTIONS[active] if active else None
+        return _OPTIONS[active] if active else _SCHEDULE
 
     async def async_select_option(self, option: str) -> None:
-        target = _TYPES[option]
+        target = _TYPES.get(option)
         current = self._active_type()
         if current == target:
             return
-        if current is not None and current != MODE_AT_HOME:
+        # AtHome is an override too ("home now"); only switching to another
+        # mode replaces it, going back to the schedule has to end it.
+        if current is not None and (current != MODE_AT_HOME or target is None):
             await self.coordinator.async_write(
                 "PUT",
                 f"/api/modes/{MODE_ENDPOINTS[current]}",
                 {"type": current, "state": MODE_INACTIVE},
             )
+        if target is None:
+            return
         if target == MODE_AT_HOME:
             content = {
                 "type": MODE_AT_HOME,
