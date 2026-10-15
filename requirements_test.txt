@@ -1,0 +1,4 @@
+pytest-homeassistant-custom-component
+ecdsa==0.19.2
+asn1crypto==1.5.1
+ruff

@@ -1,0 +1,93 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to your Danfoss Link CC",
+        "description": "Home Assistant connects the same way the Danfoss Link app does, so it needs the app's identity. Export it once from a paired Android app (see the README), then paste the files here. You can also enter a path to the file, relative to your Home Assistant configuration folder. Close the Danfoss Link app while Home Assistant is connected.",
+        "data": {
+          "cert_pem": "App certificate (app_cert.pem)",
+          "key_pem": "App private key (app_key.pem)",
+          "peer_id": "CC peer ID"
+        },
+        "data_description": {
+          "cert_pem": "Starts with -----BEGIN CERTIFICATE-----",
+          "key_pem": "Starts with -----BEGIN PRIVATE KEY----- or -----BEGIN EC PRIVATE KEY-----",
+          "peer_id": "20 bytes of hex from the app's pairings folder, e.g. e7:af:e3:77:..."
+        }
+      },
+      "reconfigure": {
+        "title": "Update Danfoss Link credentials",
+        "description": "Paste newly exported credentials, for example after re-pairing the app.",
+        "data": {
+          "cert_pem": "App certificate (app_cert.pem)",
+          "key_pem": "App private key (app_key.pem)",
+          "peer_id": "CC peer ID"
+        }
+      }
+    },
+    "error": {
+      "invalid_credentials": "The certificate, private key or peer ID could not be read, or the key does not belong to the certificate.",
+      "cc_offline": "The Danfoss cloud accepted the credentials, but your CC is not online or does not know this app. Check that the CC is connected to the internet and that the peer ID is right.",
+      "cannot_connect": "Could not connect through the Danfoss cloud. Make sure the Danfoss Link app using these credentials is closed, then try again.",
+      "unknown": "Unexpected error, see the log for details."
+    },
+    "abort": {
+      "already_configured": "This CC is already configured.",
+      "reconfigure_successful": "Credentials updated.",
+      "wrong_cc": "These credentials are for a different CC."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Polling interval"
+        },
+        "data_description": {
+          "scan_interval": "How often to read the CC. Every poll goes through the Danfoss cloud."
+        }
+      }
+    }
+  },
+  "entity": {
+    "climate": {
+      "room": {
+        "state_attributes": {
+          "hvac_mode": {
+            "state": {
+              "auto": "Schedule",
+              "heat": "Manual"
+            }
+          }
+        }
+      }
+    },
+    "number": {
+      "at_home_setpoint": {
+        "name": "At home temperature"
+      },
+      "away_setpoint": {
+        "name": "Away temperature"
+      },
+      "vacation_temperature": {
+        "name": "Vacation temperature"
+      }
+    },
+    "select": {
+      "house_mode": {
+        "name": "House mode",
+        "state": {
+          "at_home": "At home",
+          "vacation": "Vacation",
+          "pause": "Pause",
+          "boost": "Boost"
+        }
+      }
+    },
+    "sensor": {
+      "alarms": {
+        "name": "Unread alarms"
+      }
+    }
+  }
+}

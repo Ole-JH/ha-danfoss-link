@@ -1,0 +1,5 @@
+{
+  "name": "Danfoss Link",
+  "homeassistant": "2025.7.0",
+  "render_readme": true
+}
