@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Never commit real credentials. Test-only keys live in tests/fixtures.
+*.pem
+!tests/fixtures/*.pem
+danfoss_link_creds/

@@ -1,0 +1,17 @@
+{
+  "domain": "danfoss_link",
+  "name": "Danfoss Link",
+  "codeowners": [
+    "@Ole-JH"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/Ole-JH/ha-danfoss-link",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/Ole-JH/ha-danfoss-link/issues",
+  "requirements": [
+    "ecdsa==0.19.2",
+    "asn1crypto==1.5.1"
+  ],
+  "version": "0.1.0"
+}
