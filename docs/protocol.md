@@ -40,6 +40,12 @@ products.
 | `77.66.11.90`, `77.66.11.92`, `77.66.11.94` | 443 | openHAB #18/#27; opensdg `grid.c` |
 | `5.179.92.180`, `5.179.92.182` | 443 | openHAB #18/#27; opensdg `grid.c` |
 
+On 2026-10-15 `mdg-danfoss.hosted.trifork.com` still resolves, to eight
+addresses: `77.66.11.90`, `77.66.11.92`, `77.66.7.41`, `77.66.7.42`,
+`5.179.92.171`, `5.179.92.172`, `5.179.92.180`, `5.179.92.182`. The TLS
+parameters could not be probed from our sandbox (its egress proxy terminates
+TLS), so question 4 below is still open.
+
 The app has the IPs hard-coded with the hostname as fallback, so a DNS
 redirect alone does not intercept it. [ChristianHC #23]
 
