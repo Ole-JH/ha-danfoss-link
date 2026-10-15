@@ -5,7 +5,391 @@ Danfoss Link CC central controller, and what an integration would have to do to
 emulate it. Each claim names its source. Items marked **unverified** come from
 community reports nobody has confirmed against a live system.
 
-Status as of 2026-10-15: research only, no captures from our own system yet.
+Status as of 2026-10-15: section 0 is from decompiling the Android app; sections 1 onward are the earlier community research, kept for sources. Where they disagree, section 0 wins (for example TLS 1.2, not 1.0).
+
+## 0. Findings from the Android app (v1.3.10)
+
+Source: Danfoss Link Android APK 1.3.10 (`com.danfoss.linkapp`, build
+2026-01-29), supplied by Ole on 2026-10-15. Java decompiled with jadx; the
+bundled Lua (`luafiles/mdg-c.zip`) is Lua 5.1 bytecode in a compact variant
+(header format byte `0xCC`, all ints as big-endian 7-bit varints, line info
+stripped) which we converted to standard 5.1 bytecode and decompiled with
+unluac. Everything below was read statically from that code; none of it has
+been tested on the wire yet.
+
+### Architecture inside the app
+
+- Java UI (`com.danfoss.cumulus`) builds JSON requests and passes them to an
+  embedded Lua VM (`libluavm-java.so`, Trifork `com.trifork.mdg.LuaVM`) over
+  a pipe. The Lua "MDG" library does all networking, TLS and pairing.
+- Java→Lua control commands (`R1/a.java`): `connect`, `disconnect`, `whoami`,
+  `pairings`, `status`, `pair-remote otp=…`, `pair-local ip=… otp=…`,
+  `place-call device_id=… protocol=… ticket=… comm_channel=…`,
+  `place-call-local ip=… device_id=… protocol=…`, `revoke-pairing device_id=…`.
+- The app always calls the CC with protocol name **`cc_json`**.
+
+### Client identity (answers open question 1)
+
+- On first start the app **generates its own key pair and a self-signed
+  certificate** on curve **brainpoolP320r1** (`want_selfsigned_cert = true`,
+  stored as `app_key.pem` / `app_cert.pem`). Nothing is issued by Danfoss.
+- The client's **peer ID is the certificate's Subject Key Identifier**
+  (`my_peer_id = cert:subject_key_identifier()`), i.e. 20 bytes. This
+  explains the "20-byte peer ID" reports.
+- So an integration can mint its own identity with standard tools.
+
+### TLS to the grid (answers open question 4, on paper)
+
+From `common_peer_config`:
+
+```
+protocol = "tlsv1_2"
+curve    = "brainpoolP320r1"
+cafile   = trusted-CAs.pem   -- "MDG CA", O=Trifork A/S, L=Aarhus, valid 2014-09-26..2124-04-02
+verify   = { "peer", "fail_if_no_peer_cert" }
+options  = { "all", "no_sslv2", "no_ticket" }
+cipher   = ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:
+           ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA
+```
+
+TLS 1.2 (not 1.0 as older forum posts said), ECDSA certificates, client
+certificate required. The grid's certificate must chain to the bundled
+Trifork "MDG CA".
+
+Grid endpoints, all port 443: IPv4 `77.66.11.90`, `77.66.11.92`,
+`5.179.92.180`, `5.179.92.182`; IPv6 `2001:1448:248:2ea::234:18`,
+`2a02:188:3f03:1ea::234:18`, `2001:1448:248:2ea::234:20`,
+`2a02:188:3f03:1ea::234:20`. Control ping every 120 s. The app also sends
+remote logs to `77.66.11.94:9999` (we should not).
+
+### Grid control protocol
+
+Protobuf 2 messages, package `mdg.control`. Handshake: `magic = 4036857000`
+(`0xF09F90A8`), `version_major = 1`, `version_minor = 0`, plus key/value
+properties. Call flow: `place_call { peer_name, protocol = "cc_json" }` →
+`place_call_reply { result, routing { peer_name, router[] (host, port),
+token } }` → open a new connection to a router and send
+`mdg.routing.Handshake { magic, version, token, supported_protocols }` →
+`PleaseHold` / `GoAhead { selected_protocol }` / `RoutingError`. After
+`GoAhead` the stream is end-to-end with the CC.
+
+Remote pairing: `allocate_pairing_channel` / `place_pairing_call { pair_id }`
+on the control connection, then the PACE exchange below on the routed stream.
+
+The exact outer framing of these protobufs on the TLS stream (length prefix
+and tag byte) is in `mdg_control_connection` / `mdg_multiplexer` and still
+needs to be written down.
+
+### Pairing: PACE (answers open question 2, mostly)
+
+`mdg_pairing_pb` + `pace.lua`: a PACE (Password Authenticated Connection
+Establishment) exchange over brainpoolP320r1, using the OTP shown on the CC
+as the password, with AES-256-CBC for the nonce. Messages in order:
+`pace_client_hello { magic, version }` → `pace_server_hello { version, salt,
+iv, z }` → `pace_xy` ↔ `pace_pk` → `pace_proof { token }` ↔ →
+`contact_info { name }`. The result is that each side whitelists the other's
+peer ID. The precise key-derivation steps still need transcribing from
+`pace.lua`.
+
+OTPs starting with `0000` are LAN pairing codes (`pair-local`); others go via
+the grid (`pair-remote`).
+
+### LAN path
+
+The MDG library supports a direct LAN connection: mDNS service type
+`_danfoss-mdg._tcp.local.` (instance name = peer ID), `pair-local` and
+`place-call-local`. In this app build it is **switched off**
+(`enable_lan_comm = false`, `enable_mdns = false`, Java `U.a.d()` returns
+false). Whether the CC itself still advertises and listens is unknown; a
+quick `dns-sd -B _danfoss-mdg._tcp` on the home network would tell.
+
+### Application protocol `cc_json` (answers open question 3)
+
+The app sends one JSON object per message on the `cc_json` channel
+(`S/i.java`):
+
+```json
+{"id": 17,
+ "data": {"type": "JsonWebRequest",
+          "data": {"method": "GET",
+                   "uri": "api/rooms",
+                   "headers": ["Accept: application/json; charset=utf-8"],
+                   "content": { ... }}}}
+```
+
+Responses come back with the same `id`. It is effectively a REST API tunnelled
+over the MDG channel.
+
+Endpoints seen in the Java request classes:
+
+| Request | Method | URI |
+|---|---|---|
+| All rooms | GET | `api/rooms` |
+| One room | GET | `api/rooms/{id}` |
+| Change room | PATCH | `api/rooms/{id}` |
+| Living zone | PATCH | `api/zones/living` |
+| Modes | GET / PUT | `api/modes` |
+| System info / status / API versions | GET | `api/system/info`, `api/system/status`, `api/system/apiversions` |
+| Temperature settings | GET / PATCH | `api/settings/temperature` |
+| Alarms, on/off devices, software update, push registration | various | `api/alarms`, `api/onoffdevices`, `api/system/updatesoftware`, … |
+
+Room object (`GetRoomsResponse`), fields relevant to us:
+
+```
+id                 int
+name               string
+ambientTemperature number   -- current temperature (may be null)
+setpoint           { type, temperature }   -- active setpoint
+minSetpoint        number (default 6.0)
+maxSetpoint        number (default 35.0)
+regulation         { type, atHomeSetpoint, awaySetpoint, manualSetpoint }
+regulationState    string
+state              string ("Normal", ...)
+zone               string
+sortOrder          int
+schedule           { monday..sunday: [ {startTimeFromMidnight, endTimeFromMidnight, state} ] }
+floorSetpoint      { state: "Enabled"|..., temperature }
+```
+
+Setting a temperature (`PatchRoomRequest`), PATCH `api/rooms/{id}` with
+content such as:
+
+```json
+{"id": 3, "setpoint": {"temperature": 21.5}}
+{"id": 3, "regulation": {"atHomeSetpoint": 21.5}}
+{"id": 3, "regulation": {"type": "Manual", "manualSetpoint": 21.5}}
+```
+
+`setpoint.temperature` changes the current period only (matches CC firmware
+4.0.36 release note); `atHomeSetpoint` changes the comfort temperature.
+
+### Reconstructed protobuf schemas
+
+Reconstructed from the descriptor tables in `mdg_*_pb.lua` (field names,
+numbers and types are exact; package names as in the app):
+
+```proto
+// ---- mdg_control_pb
+enum mdg.control.control_message_tag {
+  MT_HANDSHAKE = 1;
+  MT_BYE = 2;
+  MT_RECONNECT = 3;
+  MT_PING = 4;
+  MT_PING_REPLY = 5;
+  MT_PLACE_CALL = 10;
+  MT_PLACE_CALL_REPLY = 11;
+  MT_INCOMING_CALL = 12;
+  MT_INCOMING_CALL_REPLY = 13;
+  MT_SET_PEER_WHITELIST = 20;
+  MT_SET_PEER_WHITELIST_REPLY = 21;
+  MT_ALLOCATE_PAIRING_CHANNEL = 30;
+  MT_ALLOCATE_PAIRING_CHANNEL_REPLY = 31;
+  MT_PLACE_PAIRING_CALL = 32;
+  MT_PLACE_PAIRING_CALL_REPLY = 33;
+}
+enum mdg.control.place_call_result {
+  OK = 0;
+  PEER_NOT_AVAILABLE = 1;
+  SERVER_ERROR = 2;
+}
+enum mdg.control.allocate_pairing_channel_result {
+  APC_OK = 0;
+  APC_DENIED = 1;
+  APC_SERVER_ERROR = 2;
+}
+message mdg.control.endpoint {
+  required bytes host = 1;
+  required uint32 port = 2;
+}
+message mdg.control.routing_info {
+  required string peer_name = 3;
+  repeated .mdg.control.endpoint router = 4;
+  required bytes token = 5;
+}
+message mdg.control.property {
+  required string key = 1;
+  required string value = 2;
+}
+message mdg.control.handshake {
+  required fixed32 magic = 1;
+  required uint32 version_major = 2;
+  required uint32 version_minor = 3;
+  repeated .mdg.control.property property = 4;
+}
+enum mdg.control.bye.bye_reason {
+  NO_ERROR = 0;
+  INTERNAL_ERROR = 1;
+  SYNTAX_ERROR = 2;
+  DENIED = 3;
+  TEMP_DENIED = 4;
+  PROTOCOL_ERROR = 5;
+  TIMEOUT = 6;
+  UNSUPPORTED_VERSION = 7;
+}
+message mdg.control.bye {
+  required .mdg.control.bye.bye_reason reason = 1;
+  optional string reason_text = 2;
+}
+message mdg.control.ping {
+  required uint32 req_id = 1;
+  optional uint32 perceived_qos = 2;
+}
+message mdg.control.ping_reply {
+  required uint32 req_id = 1;
+}
+message mdg.control.reconnect {
+  optional .mdg.control.endpoint new_host = 1;
+  optional uint32 suggested_delay = 2;
+}
+message mdg.control.place_call {
+  required uint32 req_id = 1;
+  required string peer_name = 2;
+  optional string protocol = 3;
+  optional string ticket = 4;
+}
+message mdg.control.place_call_reply {
+  required uint32 req_id = 1;
+  required .mdg.control.place_call_result result = 2;
+  optional .mdg.control.routing_info routing = 3;
+  optional string result_text = 4;
+}
+message mdg.control.incoming_call {
+  required uint32 req_id = 1;
+  required .mdg.control.routing_info routing = 2;
+  optional string protocol = 3;
+  optional string ticket = 4;
+}
+message mdg.control.incoming_call_reply {
+  required uint32 req_id = 1;
+  required bool will_accept_call = 2;
+}
+message mdg.control.set_peer_whitelist {
+  required uint32 req_id = 1;
+  repeated string peer_name = 2;
+}
+message mdg.control.set_peer_whitelist_reply {
+  required uint32 req_id = 1;
+}
+message mdg.control.allocate_pairing_channel {
+  required uint32 req_id = 1;
+}
+message mdg.control.allocate_pairing_channel_reply {
+  required uint32 req_id = 1;
+  required .mdg.control.allocate_pairing_channel_result result = 2;
+  optional string pair_id = 3;
+  optional uint64 end_of_validity = 4;
+}
+message mdg.control.place_pairing_call {
+  required uint32 req_id = 1;
+  required string pair_id = 2;
+}
+message mdg.control.place_pairing_call_reply {
+  required uint32 req_id = 1;
+  required .mdg.control.place_call_result result = 2;
+  optional .mdg.control.routing_info routing = 3;
+  optional string result_text = 4;
+}
+message mdg.control.incoming_pairing_call {
+  required uint32 req_id = 1;
+  required .mdg.control.routing_info routing = 2;
+  required string pair_id = 3;
+}
+message mdg.control.incoming_pairing_call_reply {
+  required uint32 req_id = 1;
+  required bool will_accept_call = 2;
+}
+// ---- mdg_library_pb
+enum mdg.library.control_message_tag {
+  MT_REQUEST = 1;
+  MT_POS_RESPONSE = 2;
+  MT_NEG_RESPONSE = 3;
+  MT_NOTIFICATION = 4;
+}
+message mdg.library.Property {
+  required string key = 1;
+  required string value = 2;
+}
+message mdg.library.Request {
+  required uint32 request_id = 1;
+  required string operation = 2;
+  repeated .mdg.library.Property parameters = 3;
+}
+message mdg.library.PosResponse {
+  required uint32 request_id = 1;
+  required string response = 2;
+}
+message mdg.library.NegResponse {
+  required uint32 request_id = 1;
+  required string error_text = 2;
+}
+message mdg.library.Notification {
+  required string event = 1;
+  repeated .mdg.library.Property parameters = 2;
+}
+// ---- mdg_pairing_pb
+enum pairing_message_tag {
+  MT_PACE_CLIENT_HELLO = 1;
+  MT_PACE_SERVER_HELLO = 2;
+  MT_PACE_XY = 3;
+  MT_PACE_PK = 4;
+  MT_PACE_PROOF = 5;
+  MT_CONTACT_INFO = 6;
+}
+message pace_client_hello {
+  required fixed32 magic = 1;
+  required uint32 version_major = 2;
+  required uint32 version_minor = 3;
+}
+message pace_server_hello {
+  required uint32 version_major = 1;
+  required uint32 version_minor = 2;
+  required bytes salt = 3;
+  required bytes iv = 4;
+  required bytes z = 5;
+}
+message pace_xy {
+  required bytes xy = 1;
+}
+message pace_pk {
+  required bytes pk = 1;
+}
+message pace_proof {
+  required bytes token = 1;
+}
+message contact_info {
+  optional string name = 1;
+}
+// ---- mdg_routing_pb
+enum mdg.routing.routing_message_tag {
+  RMT_HANDSHAKE = 0;
+  RMT_PLEASEHOLD = 1;
+  RMT_GOAHEAD = 2;
+  RMT_ROUTINGERROR = 3;
+}
+message mdg.routing.Handshake {
+  required fixed32 magic = 1;
+  required uint32 version_major = 2;
+  required uint32 version_minor = 3;
+  required bytes token = 4;
+  repeated string supported_protocols = 5;
+}
+message mdg.routing.PleaseHold {
+}
+message mdg.routing.GoAhead {
+  optional string selected_protocol = 1;
+}
+enum mdg.routing.RoutingError.RoutingErrorTypes {
+  NO_ERROR = 0;
+  SERVER_ERROR = 1;
+  SYNTAX_ERROR = 2;
+  INVALID_TOKEN = 3;
+  PEER_TIMEOUT = 4;
+  UNSUPPORTED_VERSION = 5;
+}
+message mdg.routing.RoutingError {
+  required .mdg.routing.RoutingError.RoutingErrorTypes error = 1;
+}
+```
 
 ## 1. System overview
 
