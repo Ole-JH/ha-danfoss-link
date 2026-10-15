@@ -39,7 +39,7 @@ The CC has no local API: it closes all LAN ports and only talks to the relay. To
 through, Home Assistant needs an identity (a client certificate and key) that your CC
 has paired with. There are two ways to get one:
 
-- **Pair with the code from the CC (default, not yet tried on a real CC).** Home
+- **Pair with the code from the CC (default).** Home
   Assistant creates its own identity and pairs it with the CC using the code the CC
   shows, the way the app pairs a new phone. No Android device needed, and your phone
   app keeps its own pairing.
@@ -59,9 +59,8 @@ and restart.
 
 ## Step 2: pair with the code from the CC
 
-> **Untested against a real CC.** The pairing exchange was rebuilt from the app's code
-> and is tested only against a simulated relay and CC. If it fails, please open an issue
-> with debug logs, and use the exported credentials below in the meantime.
+> Confirmed working against a real Link CC on 2026-10-15. If it fails for you, please
+> open an issue with debug logs, and use the exported credentials below in the meantime.
 
 1. Settings → Devices & services → Add integration → **Danfoss Link** →
    **Pair with the code from the CC**.
@@ -152,9 +151,8 @@ serial number.
 
 - **Cloud dependent.** Danfoss still ships CC firmware (4.2.1797, Feb 2025) and the
   relay works today, but there is no promise it stays up.
-- **Pairing with the CC's code is untested on real hardware.** It follows the app's
-  remote pairing (PACE on brainpoolP320r1) as reconstructed from the app, but has only
-  run against the simulated CC. LAN pairing codes (`0000...`) are not supported.
+- **Pairing uses the cloud relay only.** Remote pairing (PACE on brainpoolP320r1)
+  works against a real CC; LAN pairing codes (`0000...`) are not supported.
 - **Peer certificate not validated.** Like the app, the integration uses a custom TLS
   stack (the CC's brainpoolP320r1 certificates are unsupported by OpenSSL). It checks the
   handshake signatures but does not verify the relay's or the CC's certificate chain,
