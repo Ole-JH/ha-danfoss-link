@@ -10,11 +10,15 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+import hashlib
 import re
+import secrets
 
 from asn1crypto import keys as asn1_keys, x509 as asn1_x509
 from ecdsa import SigningKey, curves as ecdsa_curves
-from ecdsa.curves import Curve
+from ecdsa.curves import BRAINPOOLP320r1, Curve
+from ecdsa.util import sigencode_der
 
 from .errors import InvalidCredentials
 
@@ -66,6 +70,98 @@ def normalize_peer_id(value: str) -> str:
     return ":".join(hex_digits[i : i + 2] for i in range(0, len(hex_digits), 2))
 
 
+def _colon_hex(data: bytes) -> str:
+    return ":".join(f"{b:02x}" for b in data)
+
+
+def pem_encode(label: str, der: bytes) -> str:
+    """PEM text the way OpenSSL writes it (64 columns, LF line ends)."""
+    b64 = base64.b64encode(der).decode("ascii")
+    lines = [b64[i : i + 64] for i in range(0, len(b64), 64)]
+    return f"-----BEGIN {label}-----\n" + "\n".join(lines) + f"\n-----END {label}-----\n"
+
+
+def public_key_pem(cert_der: bytes) -> bytes:
+    """The certificate's SubjectPublicKeyInfo as PEM (OpenSSL `PEM_write_bio_PUBKEY`)."""
+    spki = asn1_x509.Certificate.load(cert_der)["tbs_certificate"]["subject_public_key_info"]
+    return pem_encode("PUBLIC KEY", spki.dump()).encode("ascii")
+
+
+def subject_key_identifier(cert_der: bytes) -> str:
+    """A certificate's peer ID: its Subject Key Identifier as `aa:bb:...` hex.
+
+    Falls back to the RFC 5280 method-1 hash (SHA-1 of the public key bits)
+    when the extension is missing; that is what the CC checks it against.
+    """
+    cert = asn1_x509.Certificate.load(cert_der)
+    ski = cert.key_identifier
+    if ski is None:
+        ski = hashlib.sha1(cert.public_key["public_key"].contents[1:]).digest()
+    return _colon_hex(ski)
+
+
+def generate_certificate(
+    common_name: str = "Home Assistant", curve: Curve = BRAINPOOLP320r1
+) -> tuple[str, str]:
+    """Create a key and self-signed certificate like the app does on first start.
+
+    Returns (certificate PEM, private key PEM). The key is on brainpoolP320r1
+    (named-curve parameters), the certificate is signed with ecdsa-with-SHA256
+    and carries a Subject Key Identifier equal to SHA-1 of the public key bits,
+    which is what the CC verifies on every connection.
+    """
+    signing_key = SigningKey.generate(curve=curve)
+    point = signing_key.verifying_key.to_string("uncompressed")
+    curve_oid = ".".join(str(part) for part in curve.oid)
+    spki = asn1_keys.PublicKeyInfo(
+        {
+            "algorithm": {
+                "algorithm": "ec",
+                "parameters": asn1_keys.ECDomainParameters(name="named", value=curve_oid),
+            },
+            "public_key": point,
+        }
+    )
+    name = asn1_x509.Name.build({"common_name": common_name})
+    now = datetime.now(UTC).replace(microsecond=0)
+    tbs = asn1_x509.TbsCertificate(
+        {
+            "version": "v3",
+            "serial_number": secrets.randbits(63) | 1,
+            "signature": {"algorithm": "sha256_ecdsa"},
+            "issuer": name,
+            "validity": {
+                "not_before": asn1_x509.Time(name="utc_time", value=now - timedelta(days=1)),
+                "not_after": asn1_x509.Time(
+                    name="general_time", value=now.replace(year=now.year + 100)
+                ),
+            },
+            "subject": name,
+            "subject_public_key_info": spki,
+            "extensions": [
+                {
+                    "extn_id": "key_identifier",
+                    "critical": False,
+                    "extn_value": hashlib.sha1(point).digest(),
+                },
+            ],
+        }
+    )
+    signature = signing_key.sign_deterministic(
+        tbs.dump(), hashfunc=hashlib.sha256, sigencode=sigencode_der
+    )
+    cert = asn1_x509.Certificate(
+        {
+            "tbs_certificate": tbs,
+            "signature_algorithm": {"algorithm": "sha256_ecdsa"},
+            "signature_value": signature,
+        }
+    )
+    cert_pem = pem_encode("CERTIFICATE", cert.dump())
+    key_pem = signing_key.to_pem(curve_parameters_encoding="named_curve").decode("ascii")
+    return cert_pem, key_pem
+
+
 @dataclass(frozen=True)
 class AppIdentity:
     """Everything needed to authenticate as the paired Danfoss Link app."""
@@ -73,6 +169,19 @@ class AppIdentity:
     cert_der: bytes
     signing_key: SigningKey
     peer_id: str
+
+    @property
+    def cert_pem(self) -> str:
+        return pem_encode("CERTIFICATE", self.cert_der)
+
+    @property
+    def key_pem(self) -> str:
+        return self.signing_key.to_pem(curve_parameters_encoding="named_curve").decode("ascii")
+
+    @property
+    def own_peer_id(self) -> str:
+        """Our own peer ID (the Subject Key Identifier of our certificate)."""
+        return subject_key_identifier(self.cert_der)
 
     @classmethod
     def from_pem(cls, cert_pem: str, key_pem: str, peer_id: str) -> AppIdentity:

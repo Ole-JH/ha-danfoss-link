@@ -20,7 +20,14 @@ from typing import Any
 
 from . import protobuf as pb
 from .credentials import AppIdentity
-from .errors import CannotConnect, DanfossLinkError, PeerNotAvailable, ProtocolError, RequestError
+from .errors import (
+    CannotConnect,
+    DanfossLinkError,
+    PeerNotAvailable,
+    ProtocolError,
+    RequestError,
+    RoutingError,
+)
 from .tls import PROFILE_APP, PROFILE_CONTROL, TLSClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,6 +53,8 @@ MT_INCOMING_CALL = 12
 MT_INCOMING_CALL_REPLY = 13
 MT_SET_PEER_WHITELIST = 20
 MT_SET_PEER_WHITELIST_REPLY = 21
+MT_PLACE_PAIRING_CALL = 32
+MT_PLACE_PAIRING_CALL_REPLY = 33
 
 # Routing message type codes
 RMT_HANDSHAKE = 0
@@ -153,6 +162,13 @@ class DanfossLinkClient:
 
     def connect(self) -> None:
         """Open the control connection and a tunnel to the CC."""
+        self._connect(with_tunnel=True)
+
+    def connect_control(self) -> None:
+        """Open only the control connection."""
+        self._connect(with_tunnel=False)
+
+    def _connect(self, *, with_tunnel: bool) -> None:
         self.close()
         errors: list[str] = []
         hosts = list(self._hosts)
@@ -160,7 +176,8 @@ class DanfossLinkClient:
             host = hosts.pop(0)
             try:
                 self._connect_control(host)
-                self._open_tunnel()
+                if with_tunnel:
+                    self._open_tunnel()
                 return
             except PeerNotAvailable:
                 self.close()
@@ -169,7 +186,12 @@ class DanfossLinkClient:
                 _LOGGER.debug("MDG host %s failed: %s", host, err)
                 errors.append(f"{host}: {err}")
                 self.close()
-        raise CannotConnect("Could not reach the CC via any MDG host (" + "; ".join(errors) + ")")
+        what = "the CC" if with_tunnel else "the relay"
+        raise CannotConnect(f"Could not reach {what} via any MDG host (" + "; ".join(errors) + ")")
+
+    def _whitelist(self) -> list[str]:
+        """Peers allowed to call us; the app sends all CCs it is paired with."""
+        return [self.identity.peer_id]
 
     def _connect_control(self, host: str) -> None:
         sock = self._socket_factory(host, self._port, self._timeout)
@@ -187,19 +209,25 @@ class DanfossLinkClient:
                 MT_HANDSHAKE,
                 pb.fixed32_field(1, CONTROL_MAGIC) + pb.varint_field(2, 1) + pb.varint_field(3, 0),
             )
-            req_id = self._req_id()
-            control.send(
-                MT_SET_PEER_WHITELIST,
-                pb.varint_field(1, req_id) + pb.bytes_field(2, self.identity.peer_id),
-            )
             self._control = control
-            self._await_control(MT_SET_PEER_WHITELIST_REPLY, req_id)
+            self.set_whitelist(self._whitelist())
         except BaseException:
             control.close()
             self._control = None
             raise
         self.connected_host = host
         _LOGGER.debug("Connected to MDG control server %s", host)
+
+    def set_whitelist(self, peer_ids: Sequence[str]) -> None:
+        """Tell the relay which peers may call us (set_peer_whitelist)."""
+        if self._control is None:
+            raise CannotConnect("No control connection")
+        req_id = self._req_id()
+        self._control.send(
+            MT_SET_PEER_WHITELIST,
+            pb.varint_field(1, req_id) + b"".join(pb.bytes_field(2, p) for p in peer_ids),
+        )
+        self._await_control(MT_SET_PEER_WHITELIST_REPLY, req_id)
 
     def _handle_control(self, type_code: int, msg: pb.Message) -> None:
         """React to unsolicited control messages."""
@@ -310,7 +338,7 @@ class DanfossLinkClient:
                 if frame[0] == RMT_GO_AHEAD:
                     break
                 if frame[0] == RMT_ROUTING_ERROR:
-                    raise CannotConnect(f"Routing error {pb.Message(frame[1:]).int(1)}")
+                    raise RoutingError(pb.Message(frame[1:]).int(1))
                 # RMT_PLEASE_HOLD: the CC has not picked up yet.
             else:
                 raise CannotConnect("The CC did not answer the call")

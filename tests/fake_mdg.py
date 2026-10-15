@@ -10,13 +10,16 @@ import contextlib
 import copy
 import json
 from pathlib import Path
+import secrets
 import socket
 import ssl
 import struct
 import threading
 from typing import Any
 
-from custom_components.danfoss_link.api import protobuf as pb
+from ecdsa.curves import NIST256p
+
+from custom_components.danfoss_link.api import pairing as pr, protobuf as pb
 from custom_components.danfoss_link.api.client import (
     CONTROL_MAGIC,
     MT_HANDSHAKE,
@@ -24,15 +27,29 @@ from custom_components.danfoss_link.api.client import (
     MT_PING_REPLY,
     MT_PLACE_CALL,
     MT_PLACE_CALL_REPLY,
+    MT_PLACE_PAIRING_CALL,
+    MT_PLACE_PAIRING_CALL_REPLY,
     MT_SET_PEER_WHITELIST,
     MT_SET_PEER_WHITELIST_REPLY,
     RMT_GO_AHEAD,
     RMT_PLEASE_HOLD,
+    RMT_ROUTING_ERROR,
     ROUTING_MAGIC,
+)
+from custom_components.danfoss_link.api.credentials import (
+    generate_certificate,
+    public_key_pem,
+    subject_key_identifier,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
 TOKEN = b"routing-token-123"
+PAIRING_TOKEN = b"pairing-token-456"
+# The code the fake CC "shows": pair ID 0012345 (leading zeros matter), password 67890.
+PAIRING_CODE = "0012-3456-7890"
+PAIR_ID = "0012345"
+PAIR_PASSWORD = "67890"
+CC_NAME = "Danfoss Link CC"
 
 ROOMS = [
     {
@@ -127,6 +144,16 @@ class FakeMDG:
         self.tunnels_opened = 0
         self.control_connections = 0
         self.drop_tunnel_after: int | None = None
+        # Pairing: the CC accepts one pairing call for PAIR_ID while pairing_open.
+        self.pairing_open = True
+        self.pairing_routing_error: int | None = None
+        self.pairing_stall = False
+        self._pairing_done = threading.Event()
+        self.pairing_results: list[bool] = []
+        self.last_cipher: tuple[str, str, int] | None = None
+        self.paired: list[tuple[str | None, bytes]] = []
+        self.cc_cert_der = ssl.PEM_cert_to_DER_cert((FIXTURES / "server_cert.pem").read_text())
+        self.cc_peer_id = subject_key_identifier(self.cc_cert_der)
         self._live: list[socket.socket] = []
         self._threads: list[threading.Thread] = []
         self._stop = threading.Event()
@@ -178,6 +205,34 @@ class FakeMDG:
         for thread in self._threads:
             thread.join(timeout=5)
 
+    def wait_for_pairing(self, timeout: float = 5) -> None:
+        """Wait until the fake CC has finished its side of the last pairing."""
+        self._pairing_done.wait(timeout)
+
+    def trust(self, cert_pem: str) -> None:
+        """Accept a client certificate from now on.
+
+        The real relay and CC accept any self-signed certificate on a pairing
+        call; Python's ssl cannot do that, so tests register the identity that
+        pairing generates.
+        """
+        self.ctx.load_verify_locations(cadata=cert_pem)
+
+    def generate_trusted_certificate(
+        self, common_name: str = "Home Assistant", curve: Any = None
+    ) -> tuple[str, str]:
+        """Stand-in for generate_certificate in pairing tests.
+
+        Python's ssl (OpenSSL 3) cannot act as the server for a brainpoolP320r1
+        client certificate, so the identity is made on P-256 and trusted. Each
+        gets a unique subject because OpenSSL finds trusted certificates by name.
+        """
+        cert_pem, key_pem = generate_certificate(
+            f"{common_name} {secrets.token_hex(4)}", curve=NIST256p
+        )
+        self.trust(cert_pem)
+        return cert_pem, key_pem
+
     def drop_connections(self) -> None:
         for sock in self._live:
             with contextlib.suppress(OSError):
@@ -216,6 +271,20 @@ class FakeMDG:
                 else:
                     reply += pb.bytes_field(4, "PEER_NOT_AVAILABLE")
                 _send_frame(tls, MT_PLACE_CALL_REPLY, reply)
+            elif msg_type == MT_PLACE_PAIRING_CALL:
+                if self.pairing_open and msg.str(2) == PAIR_ID:
+                    router = pb.bytes_field(1, "127.0.0.1") + pb.varint_field(2, self.router_port)
+                    routing = (
+                        pb.bytes_field(3, self.cc_peer_id)
+                        + pb.bytes_field(4, router)
+                        + pb.bytes_field(5, PAIRING_TOKEN)
+                    )
+                    reply = pb.varint_field(1, req_id) + pb.varint_field(2, 0)
+                    reply += pb.bytes_field(3, routing)
+                else:
+                    reply = pb.varint_field(1, req_id) + pb.varint_field(2, 1)
+                    reply += pb.bytes_field(4, "PEER_NOT_AVAILABLE")
+                _send_frame(tls, MT_PLACE_PAIRING_CALL_REPLY, reply)
             elif msg_type == MT_PING_REPLY:
                 self.ping_replies.append(req_id)
 
@@ -226,12 +295,21 @@ class FakeMDG:
         msg = pb.Message(payload)
         assert msg_type == 0
         assert msg.int(1) == ROUTING_MAGIC
-        assert msg.bytes(4) == TOKEN
+        assert msg.bytes(4) in (TOKEN, PAIRING_TOKEN)
         assert msg.str(5) == "tlsv1_2"
         _send_frame(conn, RMT_PLEASE_HOLD, b"")
+        if msg.bytes(4) == PAIRING_TOKEN and self.pairing_routing_error is not None:
+            _send_frame(conn, RMT_ROUTING_ERROR, pb.varint_field(1, self.pairing_routing_error))
+            return
         _send_frame(conn, RMT_GO_AHEAD, pb.bytes_field(1, "tlsv1_2"))
         tls = self.ctx.wrap_socket(conn, server_side=True)
         self._live.append(tls)
+        if msg.bytes(4) == PAIRING_TOKEN:
+            try:
+                self._serve_pairing(tls)
+            finally:
+                self._pairing_done.set()
+            return
         self.tunnels_opened += 1
         served = 0
         while True:
@@ -257,6 +335,52 @@ class FakeMDG:
                     },
                 },
             )
+
+    # ------------------------------------------------------------ pairing
+
+    def _serve_pairing(self, tls: ssl.SSLSocket) -> None:
+        """The CC's half of PACE (pace.server_part) and the contact_info exchange."""
+        self.pairing_open = False  # a pairing code is single use
+        self.last_cipher = tls.cipher()
+
+        def recv(tag: int) -> pb.Message:
+            got, payload = _read_frame(tls)
+            assert got == tag, f"expected pairing message {tag}, got {got}"
+            return pb.Message(payload)
+
+        client_cert = tls.getpeercert(binary_form=True)
+        assert client_cert
+        hello = recv(pr.PT_CLIENT_HELLO)
+        if self.pairing_stall:
+            self._stop.wait(30)
+            return
+        assert hello.int(1) == pr.PACE_MAGIC
+        assert (hello.int(2), hello.int(3)) == pr.PACE_VERSION
+        salt = b"1234"  # a literal constant in the app's pace.lua
+        pi = pr.calculate_pi(
+            PAIR_PASSWORD, public_key_pem(self.cc_cert_der), public_key_pem(client_cert)
+        )
+        nonce = pr.random_scalar()
+        z = pr.encode_nonce(pr.calculate_kpi(pi, salt), nonce)
+        _send_frame(
+            tls,
+            pr.PT_SERVER_HELLO,
+            pb.varint_field(1, 1) + pb.varint_field(2, 0) + pb.bytes_field(3, salt)
+            + pb.bytes_field(4, b"\x01\x02") + pb.bytes_field(5, z),
+        )  # fmt: skip
+        exchange = pr.PaceExchange(nonce)
+        _send_frame(tls, pr.PT_XY, pb.bytes_field(1, exchange.xy()))
+        pk = exchange.pk(recv(pr.PT_XY).bytes(1) or b"")
+        _send_frame(tls, pr.PT_PK, pb.bytes_field(1, pk))
+        proof = exchange.proof(recv(pr.PT_PK).bytes(1) or b"")
+        _send_frame(tls, pr.PT_PROOF, pb.bytes_field(1, proof))
+        ok = exchange.verify(recv(pr.PT_PROOF).bytes(1) or b"")
+        self.pairing_results.append(ok)
+        if not ok:
+            return  # the app's pairing_procedure closes the socket
+        _send_frame(tls, pr.PT_CONTACT_INFO, pb.bytes_field(1, CC_NAME))
+        contact = recv(pr.PT_CONTACT_INFO)
+        self.paired.append((contact.str(1), client_cert))
 
     @staticmethod
     def _send_json(tls: Any, message: dict[str, Any]) -> None:

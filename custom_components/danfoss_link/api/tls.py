@@ -28,7 +28,7 @@ from asn1crypto import x509 as asn1_x509
 from cryptography.hazmat.primitives.asymmetric import ec, x25519
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-from ecdsa import SigningKey, VerifyingKey
+from ecdsa import BRAINPOOLP320r1, SigningKey, VerifyingKey
 from ecdsa.util import sigdecode_der, sigencode_der
 
 from .credentials import _curve_from_params
@@ -62,6 +62,17 @@ _ECDHE_GROUPS: dict[int, ec.EllipticCurve | None] = {
     0x0019: ec.SECP521R1(),
     0x001D: None,  # x25519
 }
+_BRAINPOOL320_POINT_LEN = 1 + 2 * 40
+
+
+def _brainpool320_ecdh(server_point: bytes) -> tuple[bytes, bytes]:
+    """ECDH on brainpoolP320r1; returns (shared x-coordinate, our uncompressed point)."""
+    peer = VerifyingKey.from_string(server_point, curve=BRAINPOOLP320r1).pubkey.point
+    ours = SigningKey.generate(curve=BRAINPOOLP320r1)
+    shared = peer * ours.privkey.secret_multiplier
+    return shared.x().to_bytes(40, "big"), ours.verifying_key.to_string("uncompressed")
+
+
 _SIG_HASHES = {2: "sha1", 3: "sha224", 4: "sha256", 5: "sha384", 6: "sha512"}
 
 EXT_SERVER_NAME = 0x0000
@@ -403,6 +414,9 @@ class TLSClient:
             raise ProtocolError(f"Server chose unsupported ECDHE group 0x{self.group:04X}")
         curve = _ECDHE_GROUPS[self.group]
         try:
+            if self.group == 0x001D and len(server_point) == _BRAINPOOL320_POINT_LEN:
+                # The app's patched OpenSSL uses ID 29 for brainpoolP320r1, not x25519.
+                return _brainpool320_ecdh(server_point)
             if curve is None:
                 private = x25519.X25519PrivateKey.generate()
                 peer = x25519.X25519PublicKey.from_public_bytes(server_point)

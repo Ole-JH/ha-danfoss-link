@@ -3,6 +3,28 @@
     "step": {
       "user": {
         "title": "Connect to your Danfoss Link CC",
+        "description": "Home Assistant connects through the Danfoss cloud the same way the Danfoss Link app does. How do you want to set it up?",
+        "menu_options": {
+          "pair": "Pair with the code from the CC",
+          "credentials": "Use exported app credentials"
+        }
+      },
+      "pair": {
+        "title": "Pair with your Danfoss Link CC",
+        "description": "On the CC, start pairing a new app (as when you paired your phone) and enter the code it shows. Home Assistant is paired as its own app, separate from the Danfoss Link app on your phone. The CC must be connected to the internet.",
+        "data": {
+          "code": "Pairing code"
+        },
+        "data_description": {
+          "code": "The code shown on the CC display. Dashes and spaces are ignored."
+        }
+      },
+      "verify": {
+        "title": "Paired, but cannot connect yet",
+        "description": "Home Assistant is now paired with the CC, but the first connection failed. Submit to try again; you do not need a new code."
+      },
+      "credentials": {
+        "title": "Use exported app credentials",
         "description": "Home Assistant connects the same way the Danfoss Link app does, so it needs the app's identity. Export it once from a paired Android app (see the README), then paste the files here. You can also enter a path to the file, relative to your Home Assistant configuration folder. Close the Danfoss Link app while Home Assistant is connected.",
         "data": {
           "cert_pem": "App certificate (app_cert.pem)",
@@ -29,7 +51,12 @@
       "invalid_credentials": "The certificate, private key or peer ID could not be read, or the key does not belong to the certificate.",
       "cc_offline": "The Danfoss cloud accepted the credentials, but your CC is not online or does not know this app. Check that the CC is connected to the internet and that the peer ID is right.",
       "cannot_connect": "Could not connect through the Danfoss cloud. Make sure the Danfoss Link app using these credentials is closed, then try again.",
-      "unknown": "Unexpected error, see the log for details."
+      "unknown": "Unexpected error, see the log for details.",
+      "invalid_code": "That is not a pairing code. Enter the code exactly as the CC shows it.",
+      "lan_code": "Codes starting with 0000 are for pairing on the local network, which this integration does not support yet. Only codes for pairing through the Danfoss cloud work.",
+      "wrong_code": "The CC rejected the code. Check it and try again, or start pairing again on the CC.",
+      "code_expired": "No CC is waiting for this code. It may have expired or been mistyped; start pairing again on the CC and enter the new code.",
+      "pairing_timeout": "The CC stopped answering during pairing. Check that it is online and try again with a new code."
     },
     "abort": {
       "already_configured": "This CC is already configured.",

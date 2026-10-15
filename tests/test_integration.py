@@ -19,7 +19,7 @@ from homeassistant.components.climate import (
 from homeassistant.components.number import DOMAIN as NUMBER_DOMAIN, SERVICE_SET_VALUE
 from homeassistant.components.select import DOMAIN as SELECT_DOMAIN, SERVICE_SELECT_OPTION
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
-from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
+from homeassistant.config_entries import SOURCE_USER, ConfigEntryState, ConfigFlowResult
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     ATTR_TEMPERATURE,
@@ -33,16 +33,22 @@ from homeassistant.helpers import device_registry as dr
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.danfoss_link.api import DanfossLinkClient
+from custom_components.danfoss_link.api import (
+    AppIdentity,
+    DanfossLinkClient,
+    pair_with_code,
+    pairing as pairing_module,
+)
 from custom_components.danfoss_link.const import (
     CONF_CERT_PEM,
+    CONF_CODE,
     CONF_KEY_PEM,
     CONF_PEER_ID,
     DOMAIN,
 )
 from custom_components.danfoss_link.diagnostics import async_get_config_entry_diagnostics
 
-from .fake_mdg import FIXTURES, FakeMDG
+from .fake_mdg import FIXTURES, PAIR_ID, PAIR_PASSWORD, PAIRING_CODE, FakeMDG
 
 PEER_ID = "e7:af:e3:77:61:90:0d:b5:1f:87:d9:7c:ea:da:10:1e:25:26:9b:a1"
 CERT = (FIXTURES / "app_p256_cert.pem").read_text()
@@ -80,9 +86,19 @@ async def _setup(hass: HomeAssistant) -> MockConfigEntry:
 # --------------------------------------------------------------- config flow
 
 
-async def test_user_flow(hass: HomeAssistant, fake: FakeMDG) -> None:
+async def _start_credentials_flow(hass: HomeAssistant) -> ConfigFlowResult:
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    assert result["type"] is FlowResultType.MENU
+    assert result["menu_options"] == ["pair", "credentials"]
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "credentials"}
+    )
+
+
+async def test_user_flow(hass: HomeAssistant, fake: FakeMDG) -> None:
+    result = await _start_credentials_flow(hass)
     assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "credentials"
     result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "My home"
@@ -96,7 +112,7 @@ async def test_user_flow_reads_files(hass: HomeAssistant, fake: FakeMDG, tmp_pat
     (tmp_path / "creds").mkdir()
     shutil.copy(FIXTURES / "app_p256_cert.pem", tmp_path / "creds" / "app_cert.pem")
     shutil.copy(FIXTURES / "app_p256_key.pem", tmp_path / "creds" / "app_key.pem")
-    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await _start_credentials_flow(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -121,7 +137,7 @@ async def test_user_flow_reads_files(hass: HomeAssistant, fake: FakeMDG, tmp_pat
 async def test_user_flow_invalid(
     hass: HomeAssistant, fake: FakeMDG, change: dict, error: str
 ) -> None:
-    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await _start_credentials_flow(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {**USER_INPUT, **change}
     )
@@ -131,7 +147,7 @@ async def test_user_flow_invalid(
 
 async def test_user_flow_cc_offline(hass: HomeAssistant, fake: FakeMDG) -> None:
     fake.place_call_result = 1
-    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await _start_credentials_flow(hass)
     result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
     assert result["errors"] == {"base": "cc_offline"}
 
@@ -145,14 +161,14 @@ async def test_user_flow_cc_offline(hass: HomeAssistant, fake: FakeMDG) -> None:
 async def test_user_flow_cannot_connect(hass: HomeAssistant, socket_enabled: None) -> None:
     client = functools.partial(DanfossLinkClient, hosts=("127.0.0.1",), port=1, timeout=1)
     with patch("custom_components.danfoss_link.config_flow.DanfossLinkClient", client):
-        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+        result = await _start_credentials_flow(hass)
         result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
     assert result["errors"] == {"base": "cannot_connect"}
 
 
 async def test_user_flow_already_configured(hass: HomeAssistant, fake: FakeMDG) -> None:
     await _setup(hass)
-    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await _start_credentials_flow(hass)
     result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
@@ -342,3 +358,95 @@ async def test_diagnostics_redacts_secrets(hass: HomeAssistant, fake: FakeMDG) -
     assert "123456" not in text
     assert diag["connection"]["connected"] is True
     assert diag["data"]["rooms"][0]["name"] == "Living room"
+
+
+# ------------------------------------------------------------ pairing flow
+
+
+@pytest.fixture
+def pairing(fake: FakeMDG) -> Iterator[FakeMDG]:
+    pair = functools.partial(
+        pair_with_code, hosts=("127.0.0.1",), port=fake.control_port, timeout=5
+    )
+    with (
+        patch("custom_components.danfoss_link.config_flow.pair_with_code", pair),
+        patch.object(pairing_module, "generate_certificate", fake.generate_trusted_certificate),
+    ):
+        yield fake
+
+
+async def _start_pair_flow(hass: HomeAssistant) -> ConfigFlowResult:
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "pair"}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "pair"
+    return result
+
+
+async def test_pair_flow(hass: HomeAssistant, pairing: FakeMDG) -> None:
+    result = await _start_pair_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_CODE: PAIRING_CODE}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == "My home"
+    data = result["data"]
+    assert data[CONF_PEER_ID] == pairing.cc_peer_id
+    assert result["result"].unique_id == pairing.cc_peer_id
+    identity = AppIdentity.from_pem(data[CONF_CERT_PEM], data[CONF_KEY_PEM], data[CONF_PEER_ID])
+    pairing.wait_for_pairing()
+    assert pairing.paired == [("Home Assistant", identity.cert_der)]
+    assert ("GET", "/api/rooms", None) in pairing.requests
+    await hass.async_block_till_done()
+    assert result["result"].state is ConfigEntryState.LOADED
+    assert hass.states.get("climate.living_room") is not None
+
+
+@pytest.mark.parametrize(
+    ("code", "error"),
+    [
+        ("0000-1234-5678", "lan_code"),
+        ("123", "invalid_code"),
+        ("99" + PAIR_ID + PAIR_PASSWORD, "code_expired"),
+        (PAIR_ID + "00000", "wrong_code"),
+    ],
+)
+async def test_pair_flow_errors(
+    hass: HomeAssistant, pairing: FakeMDG, code: str, error: str
+) -> None:
+    result = await _start_pair_flow(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_CODE: code})
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "pair"
+    assert result["errors"] == {"base": error}
+
+
+async def test_pair_flow_retries_without_repairing(hass: HomeAssistant, pairing: FakeMDG) -> None:
+    pairing.place_call_result = 1
+    with patch("custom_components.danfoss_link.config_flow.PAIRED_PROBE_DELAY", 0):
+        result = await _start_pair_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_CODE: PAIRING_CODE}
+        )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "verify"
+    assert result["errors"] == {"base": "cc_offline"}
+
+    pairing.place_call_result = 0
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert len(pairing.paired) == 1
+    await hass.async_block_till_done()
+
+
+async def test_pair_flow_already_configured(hass: HomeAssistant, pairing: FakeMDG) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=pairing.cc_peer_id, data={})
+    entry.add_to_hass(hass)
+    result = await _start_pair_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_CODE: PAIRING_CODE}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"

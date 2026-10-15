@@ -6,10 +6,17 @@ from .errors import (
     CannotConnect,
     DanfossLinkError,
     InvalidCredentials,
+    InvalidPairingCode,
+    LanPairingNotSupported,
+    PairingCodeExpired,
+    PairingError,
+    PairingTimeout,
     PeerNotAvailable,
     ProtocolError,
     RequestError,
+    WrongPairingCode,
 )
+from .pairing import pair_with_code
 
 __all__ = [
     "AppIdentity",
@@ -17,8 +24,15 @@ __all__ = [
     "DanfossLinkClient",
     "DanfossLinkError",
     "InvalidCredentials",
+    "InvalidPairingCode",
+    "LanPairingNotSupported",
+    "PairingCodeExpired",
+    "PairingError",
+    "PairingTimeout",
     "PeerNotAvailable",
     "ProtocolError",
     "RequestError",
+    "WrongPairingCode",
     "normalize_peer_id",
+    "pair_with_code",
 ]

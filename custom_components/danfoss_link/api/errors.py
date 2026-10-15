@@ -25,6 +25,38 @@ class ProtocolError(CannotConnect):
     """The other side sent something we did not expect."""
 
 
+class RoutingError(CannotConnect):
+    """The MDG router refused to connect us to the peer."""
+
+    def __init__(self, code: int | None) -> None:
+        super().__init__(f"Routing error {code}")
+        self.code = code
+
+
+class PairingError(DanfossLinkError):
+    """Pairing with the code shown on the CC failed."""
+
+
+class InvalidPairingCode(PairingError):
+    """The text entered is not a pairing code."""
+
+
+class LanPairingNotSupported(PairingError):
+    """The code is a LAN pairing code (starts with 0000), which is not supported."""
+
+
+class PairingCodeExpired(PairingError):
+    """No CC is waiting for this code: it has expired or was mistyped."""
+
+
+class WrongPairingCode(PairingError):
+    """A CC answered, but the password part of the code did not match."""
+
+
+class PairingTimeout(PairingError):
+    """The relay or the CC stopped answering during pairing."""
+
+
 class RequestError(DanfossLinkError):
     """The CC answered a request with an HTTP error status."""
 

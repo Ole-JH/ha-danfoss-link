@@ -36,17 +36,56 @@ Home Assistant ──mTLS──► Danfoss MDG relay (77.66.11.x / 5.179.92.x : 
 ```
 
 The CC has no local API: it closes all LAN ports and only talks to the relay. To get
-through, Home Assistant presents the **identity of your paired Danfoss Link app**
-(a client certificate, its private key and your CC's peer ID). That is why there is a
-one-time export step below. Technical details are in [NOTICE.md](NOTICE.md) and the
-docstrings in `custom_components/danfoss_link/api/`.
+through, Home Assistant needs an identity (a client certificate and key) that your CC
+has paired with. There are two ways to get one:
 
-## Step 1: export the app identity (one time)
+- **Pair with the code from the CC (default, not yet tried on a real CC).** Home
+  Assistant creates its own identity and pairs it with the CC using the code the CC
+  shows, the way the app pairs a new phone. No Android device needed, and your phone
+  app keeps its own pairing.
+- **Use exported app credentials.** Borrow the identity of an already paired Android
+  app (needs root or an emulator). Use this if pairing does not work for you.
 
-You need three things from an Android install of the Danfoss Link app that is
-**paired with your CC**: `app_cert.pem`, `app_key.pem` and the CC peer ID. They live in
-the app's private storage, so you need root access to that Android: a rooted phone or,
-easier, the Android emulator on a PC/Mac.
+Technical details are in [NOTICE.md](NOTICE.md), [docs/protocol.md](docs/protocol.md)
+and the docstrings in `custom_components/danfoss_link/api/`.
+
+## Step 1: install the integration
+
+**HACS:** HACS → ⋮ → Custom repositories → add `https://github.com/Ole-JH/ha-danfoss-link`
+as an *Integration*, install **Danfoss Link**, restart Home Assistant.
+
+**Manual:** copy `custom_components/danfoss_link` into your `config/custom_components/`
+and restart.
+
+## Step 2: pair with the code from the CC
+
+> **Untested against a real CC.** The pairing exchange was rebuilt from the app's code
+> and is tested only against a simulated relay and CC. If it fails, please open an issue
+> with debug logs, and use the exported credentials below in the meantime.
+
+1. Settings → Devices & services → Add integration → **Danfoss Link** →
+   **Pair with the code from the CC**.
+2. On the CC, start pairing a new app, the same way you paired your phone. The CC shows
+   a pairing code.
+3. Type the code into Home Assistant (dashes and spaces don't matter) and submit. Home
+   Assistant pairs, connects through the Danfoss cloud and reads your rooms before it
+   saves anything.
+
+The CC must be online. Codes starting with `0000` are for pairing on the local network,
+which is not supported; use a code for pairing through the cloud. If pairing worked but
+the first connection fails, the form lets you retry without a new code.
+
+Home Assistant is paired as its own app (it introduces itself to the CC as "Home
+Assistant"), separate from your phone's pairing, so the phone app should keep working
+alongside it.
+
+## Alternative: use exported app credentials
+
+If pairing doesn't work for you, Home Assistant can borrow the identity of an Android
+install of the Danfoss Link app that is **paired with your CC**. You need three things
+from it: `app_cert.pem`, `app_key.pem` and the CC peer ID. They live in the app's
+private storage, so you need root access to that Android: a rooted phone or, easier,
+the Android emulator on a PC/Mac.
 
 1. **Get the app.** Install Danfoss Link from Google Play on your own phone if it is
    still listed for you, then copy the APK off it (no root needed):
@@ -73,31 +112,27 @@ easier, the Android emulator on a PC/Mac.
 6. **Close the app** (and shut the emulator down). The relay allows one connection
    per identity, so the app and Home Assistant would keep kicking each other off. Don't
    remove the pairing or re-pair the app; that invalidates the exported identity.
-
-Treat `app_key.pem` like a password: anyone with it can control your heating.
-
-## Step 2: install the integration
-
-**HACS:** HACS → ⋮ → Custom repositories → add `https://github.com/Ole-JH/ha-danfoss-link`
-as an *Integration*, install **Danfoss Link**, restart Home Assistant.
-
-**Manual:** copy `custom_components/danfoss_link` into your `config/custom_components/`
-and restart.
-
-## Step 3: add it
-
-Settings → Devices & services → Add integration → **Danfoss Link**. Paste the contents
-of `app_cert.pem` and `app_key.pem` and the peer ID. Instead of pasting, you can copy
-the files to your config folder and enter a path such as `danfoss_link_creds/app_cert.pem`.
-The form checks the key against the certificate and connects to the CC before saving.
+7. Settings → Devices & services → Add integration → **Danfoss Link** →
+   **Use exported app credentials**. Paste the contents of `app_cert.pem` and
+   `app_key.pem` and the peer ID. Instead of pasting, you can copy the files to your
+   config folder and enter a path such as `danfoss_link_creds/app_cert.pem`. The form
+   checks the key against the certificate and connects to the CC before saving.
 
 If you re-pair the app later, use **Reconfigure** on the integration to paste the new
-files. The polling interval is under **Configure**.
+files.
+
+Treat `app_key.pem` like a password: anyone with it can control your heating. The same
+goes for the key Home Assistant creates when pairing, which is stored in its config entry.
+
+The polling interval is under **Configure** on the integration.
 
 ## Troubleshooting
 
 | Error | Meaning |
 |---|---|
+| *No CC is waiting for this code* | The code expired or was mistyped (everything but the last five characters identifies the CC). Start pairing on the CC again. |
+| *The CC rejected the code* | The last five characters of the code didn't match. Check the code and retry, or get a new one. |
+| *Codes starting with 0000...* | That is a local-network pairing code, which is not supported. |
 | *Invalid credentials* | A PEM is incomplete, the key doesn't belong to the certificate, or the peer ID isn't 20 hex bytes. |
 | *CC offline* | The relay accepted the identity but cannot reach your CC: check its internet connection and the peer ID. |
 | *Cannot connect* | The relay could not be reached, or another client (the app) is using this identity. Close the app and retry. Outbound TCP 443 to `77.66.11.90/92` and `5.179.92.180/182` must be allowed. |
@@ -117,9 +152,9 @@ serial number.
 
 - **Cloud dependent.** Danfoss still ships CC firmware (4.2.1797, Feb 2025) and the
   relay works today, but there is no promise it stays up.
-- **No pairing of its own yet.** Home Assistant borrows the app's identity instead of
-  pairing as a separate client. Native pairing (the app's PACE/OTP flow) has not been
-  reverse engineered.
+- **Pairing with the CC's code is untested on real hardware.** It follows the app's
+  remote pairing (PACE on brainpoolP320r1) as reconstructed from the app, but has only
+  run against the simulated CC. LAN pairing codes (`0000...`) are not supported.
 - **Peer certificate not validated.** Like the app, the integration uses a custom TLS
   stack (the CC's brainpoolP320r1 certificates are unsupported by OpenSSL). It checks the
   handshake signatures but does not verify the relay's or the CC's certificate chain,
@@ -146,4 +181,4 @@ pytest
 ```
 
 The tests run the real client against `tests/fake_mdg.py`, a local fake of the relay
-and CC that uses OpenSSL on the server side.
+and CC (including the CC's side of pairing) that uses OpenSSL on the server side.

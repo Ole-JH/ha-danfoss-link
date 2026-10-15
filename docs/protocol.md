@@ -88,11 +88,33 @@ as the password, with AES-256-CBC for the nonce. Messages in order:
 `pace_client_hello { magic, version }` → `pace_server_hello { version, salt,
 iv, z }` → `pace_xy` ↔ `pace_pk` → `pace_proof { token }` ↔ →
 `contact_info { name }`. The result is that each side whitelists the other's
-peer ID. The precise key-derivation steps still need transcribing from
-`pace.lua`.
+peer ID. The key derivation is implemented in `api/pairing.py`.
 
 OTPs starting with `0000` are LAN pairing codes (`pair-local`); others go via
 the grid (`pair-remote`).
+
+#### Remote pairing message order (as implemented in `api/pairing.py`)
+
+Code handling: drop `-`, ` `, `.`, `,`; the last 5 characters are the PACE
+password, the rest is `pair_id` (a string, leading zeros kept).
+
+| # | Stream | Direction | Message (tag) |
+|---|---|---|---|
+| 1 | control | → | `handshake` (1), `set_peer_whitelist { req_id }` (20, empty list) → reply (21) |
+| 2 | control | → | `place_pairing_call { req_id, pair_id }` (32) |
+| 3 | control | ← | `place_pairing_call_reply { req_id, result, routing { peer_name, router[], token } }` (33); `PEER_NOT_AVAILABLE` = wrong/expired code |
+| 4 | routing | ↔ | `Handshake { token }` (0) → `PleaseHold` (1)* → `GoAhead` (2), to `router[0]` only |
+| 5 | routed | ↔ | TLS 1.2, we are the client and present our new certificate |
+| 6 | pairing | → | `pace_client_hello { magic = 0xF09D8CA7, 1, 0 }` (1) |
+| 7 | pairing | ← | `pace_server_hello { 1, 0, salt, iv, z }` (2) |
+| 8 | pairing | ↔ | `pace_xy` (3) both ways |
+| 9 | pairing | ↔ | `pace_pk` (4) both ways |
+| 10 | pairing | ↔ | `pace_proof { token }` (5) both ways; mismatch = wrong password |
+| 11 | pairing | ↔ | `contact_info { name }` (6), each side sends first, then reads |
+| 12 | control | → | `set_peer_whitelist { req_id, peer_name = [CC peer ID] }` (20) → reply (21) |
+
+Pairing frames inside TLS are `[u16 BE length][u8 tag][protobuf]`. The CC's
+peer ID is the Subject Key Identifier of the certificate it presented in step 5.
 
 ### LAN path
 
