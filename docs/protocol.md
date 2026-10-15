@@ -205,6 +205,15 @@ PATCH api/zones/living <- {"name": ..., "schedule": {...}}   (living zone)
 - Times snap to 15 minutes (the app rounds starts down and ends up).
 - "Copy to days" sends one PATCH per weekday, each with a single day key.
   Writing a day key replaces that day.
+- Living zone: rooms whose `zone` is `"Living"` share one schedule and one
+  Schedule/Manual setting. The app lists them as a single "Living zone" entry
+  and sends both changes to `PATCH api/zones/living` with
+  `{"name": "Living", "schedule": {...}}` or
+  `{"name": "Living", "regulationType": "Manual"|"Schedule"}` (note the flat
+  `regulationType` key). Comfort/away setpoints stay per room on
+  `api/rooms/{id}`. The app never sends `regulation.type` or `schedule` to
+  `api/rooms/{id}` for a living-zone room; whether the CC accepts that is
+  untested.
 - The system-wide schedule (`schedule` / `normalSchedule` in
   `api/system/status`) is a flat period list for today, read-only in the app.
 - On/off devices have their own schedule via `PatchOnOffDeviceRequest`
