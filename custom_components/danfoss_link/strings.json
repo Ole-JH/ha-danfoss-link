@@ -109,6 +109,13 @@
           "pause": "Pause",
           "boost": "Boost"
         }
+      },
+      "room_mode": {
+        "name": "Mode",
+        "state": {
+          "schedule": "Schedule",
+          "manual": "Manual"
+        }
       }
     },
     "sensor": {

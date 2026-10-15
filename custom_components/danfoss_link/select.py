@@ -1,4 +1,4 @@
-"""House mode select (at home / vacation / pause / boost)."""
+"""Selects: the CC's house mode and each room's schedule/manual mode."""
 
 from __future__ import annotations
 
@@ -6,15 +6,26 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import MODE_ACTIVE, MODE_AT_HOME, MODE_ENDPOINTS, MODE_INACTIVE
+from .const import (
+    MODE_ACTIVE,
+    MODE_AT_HOME,
+    MODE_ENDPOINTS,
+    MODE_INACTIVE,
+    REGULATION_MANUAL,
+    REGULATION_SCHEDULE,
+)
 from .coordinator import DanfossLinkConfigEntry, DanfossLinkCoordinator
-from .entity import DanfossLinkEntity
+from .entity import DanfossLinkEntity, DanfossLinkRoomEntity
 
 PARALLEL_UPDATES = 1
 
 # CC mode type -> option key (translated in strings.json)
 _OPTIONS = {"AtHome": "at_home", "Vacation": "vacation", "Pause": "pause", "Boost": "boost"}
 _TYPES = {v: k for k, v in _OPTIONS.items()}
+
+# Room regulation type -> option key; same setting as the climate entity's auto/heat.
+_REGULATION_OPTIONS = {REGULATION_SCHEDULE: "schedule", REGULATION_MANUAL: "manual"}
+_REGULATION_TYPES = {v: k for k, v in _REGULATION_OPTIONS.items()}
 
 
 async def async_setup_entry(
@@ -23,8 +34,12 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data
+    entities: list[SelectEntity] = [
+        DanfossLinkRoomMode(coordinator, room_id) for room_id in coordinator.data.rooms
+    ]
     if any(mode.get("type") in _OPTIONS for mode in coordinator.data.modes):
-        async_add_entities([DanfossLinkHouseMode(coordinator)])
+        entities.append(DanfossLinkHouseMode(coordinator))
+    async_add_entities(entities)
 
 
 class DanfossLinkHouseMode(DanfossLinkEntity, SelectEntity):
@@ -78,3 +93,25 @@ class DanfossLinkHouseMode(DanfossLinkEntity, SelectEntity):
         else:
             content = {"type": target, "state": MODE_ACTIVE}
         await self.coordinator.async_write("PUT", f"/api/modes/{MODE_ENDPOINTS[target]}", content)
+
+
+class DanfossLinkRoomMode(DanfossLinkRoomEntity, SelectEntity):
+    """Whether a room follows its weekly schedule or holds a manual setpoint."""
+
+    _attr_translation_key = "room_mode"
+    _attr_options = list(_REGULATION_TYPES)
+
+    def __init__(self, coordinator: DanfossLinkCoordinator, room_id: int) -> None:
+        super().__init__(coordinator, room_id, "room_mode")
+
+    @property
+    def current_option(self) -> str | None:
+        regulation = (self.room.get("regulation") or {}).get("type")
+        return _REGULATION_OPTIONS.get(regulation)
+
+    async def async_select_option(self, option: str) -> None:
+        await self.coordinator.async_write(
+            "PATCH",
+            self.room_uri,
+            {"id": self.room_id, "regulation": {"type": _REGULATION_TYPES[option]}},
+        )

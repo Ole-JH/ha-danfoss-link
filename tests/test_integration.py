@@ -222,6 +222,8 @@ async def test_setup_creates_entities(hass: HomeAssistant, fake: FakeMDG) -> Non
     assert alarms.state == "1"
     assert alarms.attributes["alarms"][0]["room"] == "Bathroom"
     assert hass.states.get("select.my_home_house_mode").state == "at_home"
+    assert hass.states.get("select.living_room_mode").state == "schedule"
+    assert hass.states.get("select.bathroom_mode").state == "manual"
     assert hass.states.get("switch.my_home_towel_rail").state == "off"
     assert hass.states.get("number.living_room_at_home_temperature").state == "21.0"
     assert hass.states.get("number.bathroom_away_temperature").state == "19.0"
@@ -288,6 +290,21 @@ async def test_set_hvac_mode(hass: HomeAssistant, fake: FakeMDG) -> None:
     assert ("PATCH", "/api/rooms/0", {"id": 0, "regulation": {"type": "Manual"}}) in (fake.requests)
     await hass.async_block_till_done()
     assert hass.states.get("climate.living_room").state == HVACMode.HEAT
+
+
+async def test_room_mode_select(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    entity = "select.bathroom_mode"
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: entity, "option": "schedule"},
+        blocking=True,
+    )  # fmt: skip
+    assert ("PATCH", "/api/rooms/1", {"id": 1, "regulation": {"type": "Schedule"}}) in (
+        fake.requests
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get(entity).state == "schedule"
+    assert hass.states.get("climate.bathroom").state == HVACMode.AUTO
 
 
 async def test_rejected_write_raises(hass: HomeAssistant, fake: FakeMDG) -> None:
