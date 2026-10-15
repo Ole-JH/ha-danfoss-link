@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/icon.png" alt="" width="128" height="128">
+</p>
+
 # Danfoss Link for Home Assistant
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ole-JH&repository=ha-danfoss-link&category=integration)
@@ -216,3 +220,7 @@ pytest
 
 The tests run the real client against `tests/fake_mdg.py`, a local fake of the relay
 and CC (including the CC's side of pairing) that uses OpenSSL on the server side.
+
+The icon is original artwork, not the Danfoss logo. `scripts/generate_icons.py`
+renders it into `custom_components/danfoss_link/brand/` (shown by Home Assistant 2026.3
+and newer) and `docs/images/` (README header and GitHub social preview).
