@@ -1,16 +1,42 @@
 # Danfoss Link for Home Assistant
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ole-JH&repository=ha-danfoss-link&category=integration)
+[![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=danfoss_link)
+
 Control a **Danfoss Link CC** (central controller) and everything paired to it
 (Link Connect radiator thermostats, Link RS room sensors, Link FT floor thermostats,
 Link HC, on/off plugs) from Home Assistant, without the Danfoss Link app.
 
 Danfoss has discontinued the Link system and does not offer a Home Assistant
 integration. This custom integration does what the phone app does: it connects through
-the Danfoss cloud relay to your CC and calls the same internal REST API.
+the Danfoss cloud relay to your CC and calls the same internal REST API. It has been
+confirmed working against a real Link CC.
 
 > **Unofficial.** Not affiliated with Danfoss or Trifork. It is based on reverse
 > engineering and can stop working if Danfoss turns off the relay servers. You are
 > changing real heating settings: use at your own risk.
+
+## Quick start
+
+You need Home Assistant 2025.7 or newer with [HACS](https://hacs.xyz), and a Link CC
+that is online. You don't need your phone or the Danfoss Link app.
+
+1. **Add the repository to HACS.** Click the first blue button above (or in HACS go to
+   ⋮ → Custom repositories and add `https://github.com/Ole-JH/ha-danfoss-link` as an
+   *Integration*).
+2. **Download** Danfoss Link in HACS, then **restart Home Assistant**.
+3. **Add the integration.** Click the second blue button above (or Settings → Devices &
+   services → Add integration → **Danfoss Link**) and choose
+   **Pair with the code from the CC**.
+4. **Get a code from the CC.** On the CC's touch screen, start pairing a new app, the
+   same way you once paired your phone. The CC shows a pairing code. Codes expire
+   quickly, so have Home Assistant open and ready.
+5. **Enter the code** in Home Assistant (dashes and spaces don't matter) and submit.
+   Home Assistant pairs, connects through the Danfoss cloud and reads your rooms before
+   it saves anything.
+
+That's it. See [What to expect afterwards](#what-to-expect-afterwards) for what shows
+up, and [Troubleshooting](#troubleshooting) if a step fails.
 
 ## What you get
 
@@ -25,7 +51,7 @@ the Danfoss cloud relay to your CC and calls the same internal REST API.
 | `sensor` unread alarms | CC | Count plus details (low battery, lost device, ...) |
 
 Each room is its own device (linked to the CC device), so you can put it in an area.
-Polling runs every 60 s by default (configurable down to 20 s); changes are applied
+Polling runs every 60 s by default (configurable down to 20 s); changes are sent
 immediately.
 
 ## How it works
@@ -49,34 +75,47 @@ has paired with. There are two ways to get one:
 Technical details are in [NOTICE.md](NOTICE.md), [docs/protocol.md](docs/protocol.md)
 and the docstrings in `custom_components/danfoss_link/api/`.
 
-## Step 1: install the integration
+## Installation details
 
-**HACS:** HACS → ⋮ → Custom repositories → add `https://github.com/Ole-JH/ha-danfoss-link`
-as an *Integration*, install **Danfoss Link**, restart Home Assistant.
+**HACS (recommended):** see [Quick start](#quick-start). HACS will offer updates like
+any other integration.
 
 **Manual:** copy `custom_components/danfoss_link` into your `config/custom_components/`
-and restart.
+and restart Home Assistant.
 
-## Step 2: pair with the code from the CC
-
-> Confirmed working against a real Link CC on 2026-10-15. If it fails for you, please
-> open an issue with debug logs, and use the exported credentials below in the meantime.
-
-1. Settings → Devices & services → Add integration → **Danfoss Link** →
-   **Pair with the code from the CC**.
-2. On the CC, start pairing a new app, the same way you paired your phone. The CC shows
-   a pairing code.
-3. Type the code into Home Assistant (dashes and spaces don't matter) and submit. Home
-   Assistant pairs, connects through the Danfoss cloud and reads your rooms before it
-   saves anything.
-
-The CC must be online. Codes starting with `0000` are for pairing on the local network,
-which is not supported; use a code for pairing through the cloud. If pairing worked but
-the first connection fails, the form lets you retry without a new code.
+## Pairing details
 
 Home Assistant is paired as its own app (it introduces itself to the CC as "Home
-Assistant"), separate from your phone's pairing, so the phone app should keep working
+Assistant"), separate from your phone's pairing, so the phone app keeps working
 alongside it.
+
+- The CC must be connected to the internet: pairing goes through the Danfoss cloud.
+- Codes starting with `0000` are for pairing on the local network, which is not
+  supported. Use a code for pairing through the cloud.
+- If pairing worked but the first connection fails, the form lets you retry without a
+  new code.
+- If pairing doesn't work for you at all, please open an issue with debug logs and use
+  the [exported app credentials](#alternative-use-exported-app-credentials) in the
+  meantime.
+
+## What to expect afterwards
+
+- **Devices.** One device for the CC, and one device per room as named on the CC, linked
+  to it. Put each room device in the matching Home Assistant area.
+- **Entities.** Each room gets a thermostat card (`climate`) with the current and target
+  temperature, plus the entities listed under [What you get](#what-you-get).
+- **Modes.** On a room's thermostat, **Schedule** (`auto`) follows the CC's weekly
+  schedule and **Manual** (`heat`) holds the temperature you set. Changing the target
+  temperature in Home Assistant is sent to the CC right away; battery thermostats may
+  take a little while to follow, just as with the app.
+- **Updates.** Home Assistant reads the CC every 60 seconds. You can change this under
+  **Configure** on the integration (down to 20 seconds); every poll goes through the
+  Danfoss cloud.
+- **Your phone app** keeps its own pairing and keeps working. Changes made in the app or
+  on the CC show up in Home Assistant at the next poll.
+- **If the internet or the Danfoss cloud is down,** the entities become unavailable and
+  recover on their own when the connection is back. The CC keeps heating on its own
+  schedule in the meantime.
 
 ## Alternative: use exported app credentials
 
@@ -123,8 +162,6 @@ files.
 Treat `app_key.pem` like a password: anyone with it can control your heating. The same
 goes for the key Home Assistant creates when pairing, which is stored in its config entry.
 
-The polling interval is under **Configure** on the integration.
-
 ## Troubleshooting
 
 | Error | Meaning |
@@ -157,10 +194,9 @@ serial number.
   stack (the CC's brainpoolP320r1 certificates are unsupported by OpenSSL). It checks the
   handshake signatures but does not verify the relay's or the CC's certificate chain,
   so a man-in-the-middle on the network path is not ruled out.
-- **Not yet confirmed on real hardware by this project.** The protocol client is tested
-  end to end against a simulated relay and CC, and its TLS stack against OpenSSL, but
-  the message formats come from reverse engineering. Please open an issue with debug
-  logs if anything doesn't work with your CC.
+- **Tested on one setup so far.** It is confirmed on a real Link CC, but the message
+  formats come from reverse engineering and other device mixes may behave differently.
+  Please open an issue with debug logs if anything doesn't work with your CC.
 - Schedules can't be edited from Home Assistant yet (the API supports it).
 
 ## Alternatives
