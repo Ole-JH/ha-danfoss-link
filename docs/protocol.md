@@ -65,7 +65,7 @@ remote logs to `77.66.11.94:9999` (we should not).
 ### Grid control protocol
 
 Protobuf 2 messages, package `mdg.control`. Handshake: `magic = 4036857000`
-(`0xF09F90A8`), `version_major = 1`, `version_minor = 0`, plus key/value
+(`0xF09D8CA8`), `version_major = 1`, `version_minor = 0`, plus key/value
 properties. Call flow: `place_call { peer_name, protocol = "cc_json" }` →
 `place_call_reply { result, routing { peer_name, router[] (host, port),
 token } }` → open a new connection to a router and send
