@@ -128,7 +128,7 @@
     },
     "binary_sensor": {
       "living_zone": {
-        "name": "Opholdszone",
+        "name": "Living Zone",
         "state": {
           "off": "Nej",
           "on": "Ja"
