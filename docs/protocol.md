@@ -185,6 +185,31 @@ content such as:
 `setpoint.temperature` changes the current period only (matches CC firmware
 4.0.36 release note); `atHomeSetpoint` changes the comfort temperature.
 
+Weekly schedules (APK 1.3.5 `PatchRoomRequest`, `S.e`, `S.f`,
+`EditRoomScheduleActivity`; not yet tried live):
+
+```
+room.schedule = { monday..sunday: [ period, ... ] }      -- in GET api/rooms
+period        = { startTimeFromMidnight, endTimeFromMidnight, state }
+time          = .NET TimeSpan string "HH:MM:SS"; end of day is "1.00:00:00"
+state         = AtHome | Away | Asleep   (rooms use AtHome/Away)
+PATCH api/rooms/{id}  <- {"id": 3, "schedule": {"monday": [period, ...]}}
+PATCH api/zones/living <- {"name": ..., "schedule": {...}}   (living zone)
+```
+
+- Each day is a full 00:00-24:00 cover. The editor only holds the AtHome
+  periods; on save the app fills every gap with an `Away` period, sorts, and
+  sends the whole day (e.g. `00:00-06:00 Away, 06:00-08:00 AtHome,
+  08:00-24:00 Away`). AtHome/Away use the room's `atHomeSetpoint` /
+  `awaySetpoint`, so a schedule is periods, not temperatures.
+- Times snap to 15 minutes (the app rounds starts down and ends up).
+- "Copy to days" sends one PATCH per weekday, each with a single day key.
+  Writing a day key replaces that day.
+- The system-wide schedule (`schedule` / `normalSchedule` in
+  `api/system/status`) is a flat period list for today, read-only in the app.
+- On/off devices have their own schedule via `PatchOnOffDeviceRequest`
+  (out of scope).
+
 House modes (`GetModesResponse`, `PutModesRequest`, `GetSystemStatusResponse`
 in APK 1.3.10):
 
