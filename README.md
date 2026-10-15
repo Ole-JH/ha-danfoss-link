@@ -55,6 +55,12 @@ up, and [Troubleshooting](#troubleshooting) if a step fails.
 | `number` vacation temperature | CC | Temperature used in vacation mode |
 | `switch` | on/off device | Link on/off outputs |
 | `sensor` unread alarms | CC | Count plus details (low battery, lost device, ...) |
+| `binary_sensor` battery | room | Low battery on a device in the room, from the CC's alarms. *Disabled by default.* |
+| `binary_sensor` radio connection | room | Off when the CC has lost contact with a device in the room. *Disabled by default.* |
+| `sensor` Wi-Fi signal | CC | The CC's Wi-Fi signal strength. *Disabled by default.* |
+
+Diagnostic entities marked *disabled by default* can be turned on under the
+device's entity list in Home Assistant.
 
 Each room is its own device (linked to the CC device), so you can put it in an area.
 Polling runs every 60 s by default (configurable down to 20 s); changes are sent

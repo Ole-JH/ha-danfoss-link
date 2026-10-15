@@ -11,6 +11,7 @@ from .const import CONF_CERT_PEM, CONF_KEY_PEM, CONF_PEER_ID, DEFAULT_SCAN_INTER
 from .coordinator import DanfossLinkConfigEntry, DanfossLinkCoordinator
 
 PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
     Platform.CLIMATE,
     Platform.NUMBER,
     Platform.SELECT,

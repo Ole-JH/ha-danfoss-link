@@ -155,6 +155,24 @@ Endpoints seen in the Java request classes:
 | Temperature settings | GET / PATCH | `api/settings/temperature` |
 | Alarms, on/off devices, software update, push registration | various | `api/alarms`, `api/onoffdevices`, `api/system/updatesoftware`, … |
 
+Battery and signal (APK 1.3.10 `GetSystemInfoResponse`, `GetAlarmsResponse`,
+`S/s.java`; not yet seen live):
+
+- The CC does **not** report battery level or radio signal per thermostat.
+  The app learns about them only from `GET api/alarms`.
+- Alarm `titleTextId` / `descriptionTextId` are Android string resource names
+  (the app looks them up with `getIdentifier`, falling back to the raw id).
+  Relevant ids: `IDS_UA1_ALERTVIEWER_BATTERY_LOW_ALERT`,
+  `IDS_UA1_ALERTVIEWER_BATTERY_CRITICAL_ALERT`,
+  `IDS_UA1_ALERTVIEWER_NODE_DEAD_ALERT` (device no longer answers).
+- Alarm `room` is read with `getString`, so it may arrive as a number or a
+  string; `node` is the device within the room.
+- `GET api/system/info` carries `wifiSignalStrengthDb` (int, the CC's own
+  Wi-Fi), plus `uptime`, `cpuLoadPercentage`, `memoryLoadPercentage`,
+  `pingCallTime`, `autoUpdateSoftware`, `limitPauseDuration`, `systemTime`.
+- Strings `batteryLevel` and `signal` in the dex belong to bundled Google
+  libraries, not to the CC API.
+
 Room object (`GetRoomsResponse`), fields relevant to us:
 
 ```

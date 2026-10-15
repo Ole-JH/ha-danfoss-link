@@ -133,6 +133,14 @@
           "pause": "Pause",
           "boost": "Boost"
         }
+      },
+      "wifi_signal": {
+        "name": "Wi-Fi signal"
+      }
+    },
+    "binary_sensor": {
+      "radio": {
+        "name": "Radio connection"
       }
     }
   }

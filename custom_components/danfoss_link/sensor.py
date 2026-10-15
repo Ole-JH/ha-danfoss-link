@@ -1,4 +1,4 @@
-"""Sensors: room temperatures and controller alarms."""
+"""Sensors: room temperatures, controller alarms and diagnostics."""
 
 from __future__ import annotations
 
@@ -9,7 +9,11 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import (
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    EntityCategory,
+    UnitOfTemperature,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -33,6 +37,8 @@ async def async_setup_entry(
     entities.append(DanfossLinkAlarms(coordinator))
     if coordinator.data.status.get("currentState"):
         entities.append(DanfossLinkHouseState(coordinator))
+    if "wifiSignalStrengthDb" in coordinator.data.info:
+        entities.append(DanfossLinkWifiSignal(coordinator))
     async_add_entities(entities)
 
 
@@ -112,3 +118,21 @@ class DanfossLinkAlarms(DanfossLinkEntity, SensorEntity):
                 for alarm in self.coordinator.data.alarms
             ]
         }
+
+
+class DanfossLinkWifiSignal(DanfossLinkEntity, SensorEntity):
+    """Wi-Fi signal strength of the CC (/api/system/info wifiSignalStrengthDb)."""
+
+    _attr_translation_key = "wifi_signal"
+    _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
+    _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator: DanfossLinkCoordinator) -> None:
+        super().__init__(coordinator, "wifi_signal")
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.data.info.get("wifiSignalStrengthDb")

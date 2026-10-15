@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 import functools
 import shutil
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 from homeassistant.components.climate import (
     ATTR_HVAC_ACTION,
@@ -29,7 +29,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -239,6 +239,32 @@ async def test_setup_creates_entities(hass: HomeAssistant, fake: FakeMDG) -> Non
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert entry.state is ConfigEntryState.NOT_LOADED
+
+
+async def test_diagnostic_entities(hass: HomeAssistant, fake: FakeMDG) -> None:
+    with patch(
+        "homeassistant.helpers.entity.Entity.entity_registry_enabled_default",
+        PropertyMock(return_value=True),
+    ):
+        await _setup(hass)
+    assert hass.states.get("binary_sensor.bathroom_battery").state == "on"
+    assert hass.states.get("binary_sensor.bathroom_battery").attributes["battery_state"] == "low"
+    assert hass.states.get("binary_sensor.living_room_battery").state == "off"
+    assert hass.states.get("binary_sensor.bathroom_radio_connection").state == "on"
+    assert hass.states.get("sensor.my_home_wi_fi_signal").state == "-61"
+
+
+async def test_diagnostic_entities_disabled_by_default(hass: HomeAssistant, fake: FakeMDG) -> None:
+    entry = await _setup(hass)
+    registry = er.async_get(hass)
+    for entity_id in (
+        "binary_sensor.bathroom_battery",
+        "binary_sensor.bathroom_radio_connection",
+        "sensor.my_home_wi_fi_signal",
+    ):
+        assert registry.async_get(entity_id).disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        assert hass.states.get(entity_id) is None
+    assert entry.state is ConfigEntryState.LOADED
 
 
 async def test_setup_retries_when_cc_offline(hass: HomeAssistant, fake: FakeMDG) -> None:

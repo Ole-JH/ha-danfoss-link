@@ -121,6 +121,14 @@
     "sensor": {
       "alarms": {
         "name": "Ulæste alarmer"
+      },
+      "wifi_signal": {
+        "name": "Wi-Fi-signal"
+      }
+    },
+    "binary_sensor": {
+      "radio": {
+        "name": "Radioforbindelse"
       }
     }
   }

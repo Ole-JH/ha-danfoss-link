@@ -87,7 +87,8 @@ ROOMS = [
 
 def initial_state() -> dict[str, Any]:
     return {
-        "/api/system/info": {"name": "My home", "serialNo": "123456", "version": "4.2.1797"},
+        "/api/system/info": {"name": "My home", "serialNo": "123456", "version": "4.2.1797",
+                             "wifiSignalStrengthDb": -61},
         "/api/system/status": {"currentState": "AtHome"},
         "/api/rooms": copy.deepcopy(ROOMS),
         # Following the schedule: no mode is active (as on a real CC).
@@ -99,7 +100,8 @@ def initial_state() -> dict[str, Any]:
         "/api/onoffdevices": [{"id": 0, "name": "Towel rail", "state": "Off"}],
         "/api/alarms": [
             {"id": 3, "level": "Warning", "room": 1, "node": 7, "isRead": False,
-             "titleTextId": "LowBattery", "createdDate": "2026-10-01T10:00:00"},
+             "titleTextId": "IDS_UA1_ALERTVIEWER_BATTERY_LOW_ALERT",
+             "createdDate": "2026-10-01T10:00:00"},
         ],
         "/api/settings/temperature": {"vacationTemperature": {"setpoint": 15.0}},
     }  # fmt: skip
