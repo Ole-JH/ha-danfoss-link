@@ -46,8 +46,9 @@ up, and [Troubleshooting](#troubleshooting) if a step fails.
 
 | Entity | Per | What it does |
 |---|---|---|
-| `climate` | room | Current and target temperature. **Auto** = follow the room's schedule, **Heat** = manual setpoint. Shows whether the room is heating. |
+| `climate` | room | Current and target temperature. **Auto** = Schedule, **Heat** = Manual (see [Modes](#what-to-expect-afterwards)). Shows whether the room is heating. |
 | `sensor` temperature | room | Room temperature for history/statistics |
+| `select` mode | room | **Schedule** / **Manual**, the same setting as the thermostat's Auto/Heat, for dashboards and automations |
 | `number` at-home / away temperature | room | The two temperatures the schedule switches between |
 | `select` house mode | CC | At home / Vacation / Pause (/ Boost if your CC has it) |
 | `number` vacation temperature | CC | Temperature used in vacation mode |
@@ -108,10 +109,18 @@ alongside it.
   to it. Put each room device in the matching Home Assistant area.
 - **Entities.** Each room gets a thermostat card (`climate`) with the current and target
   temperature, plus the entities listed under [What you get](#what-you-get).
-- **Modes.** On a room's thermostat, **Schedule** (`auto`) follows the CC's weekly
-  schedule and **Manual** (`heat`) holds the temperature you set. Changing the target
-  temperature in Home Assistant is sent to the CC right away; battery thermostats may
-  take a little while to follow, just as with the app.
+- **Modes.** Each room is either on **Schedule** or **Manual**, the same choice as in
+  the Danfoss Link app. Home Assistant only allows fixed names for thermostat modes, so
+  the thermostat card shows them as **Auto** (= Schedule) and **Heat** (= Manual). The
+  room's **Mode** select shows the same setting by its real name; changing either one
+  changes both.
+  - **Schedule / Auto**: the room follows the CC's weekly program, switching between the
+    at-home and away temperatures. Changing the target temperature only lasts until the
+    next switch in the program.
+  - **Manual / Heat**: the room holds the temperature you set until you change it.
+
+  Changes are sent to the CC right away; battery thermostats may take a little while to
+  follow, just as with the app.
 - **Updates.** Home Assistant reads the CC every 60 seconds. You can change this under
   **Configure** on the integration (down to 20 seconds); every poll goes through the
   Danfoss cloud.
