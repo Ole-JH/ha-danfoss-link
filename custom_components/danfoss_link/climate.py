@@ -102,8 +102,4 @@ class DanfossLinkRoomClimate(DanfossLinkRoomEntity, ClimateEntity):
         )
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        await self.coordinator.async_write(
-            "PATCH",
-            self.room_uri,
-            {"id": self.room_id, "regulation": {"type": _HVAC_TO_REGULATION[hvac_mode]}},
-        )
+        await self.async_set_regulation_type(_HVAC_TO_REGULATION[hvac_mode])

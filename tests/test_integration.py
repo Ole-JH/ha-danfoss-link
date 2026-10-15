@@ -316,7 +316,12 @@ async def test_set_hvac_mode(hass: HomeAssistant, fake: FakeMDG) -> None:
         {ATTR_ENTITY_ID: "climate.living_room", ATTR_HVAC_MODE: HVACMode.HEAT},
         blocking=True,
     )
-    assert ("PATCH", "/api/rooms/0", {"id": 0, "regulation": {"type": "Manual"}}) in (fake.requests)
+    # The living room is in the living zone, so the change goes to the zone.
+    assert (
+        "PATCH",
+        "/api/zones/living",
+        {"name": "Living", "regulationType": "Manual"},
+    ) in fake.requests
     await hass.async_block_till_done()
     assert hass.states.get("climate.living_room").state == HVACMode.HEAT
 

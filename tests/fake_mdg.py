@@ -80,7 +80,7 @@ ROOMS = [
         "maxSetpoint": 35.0,
         "regulationState": "Idle",
         "state": "Normal",
-        "zone": "Living",
+        "zone": "None",
     },
 ]
 
@@ -403,11 +403,23 @@ class FakeMDG:
                 return 400, {"errorMessages": ["JSON content does not conform to JSON Schema."]}
             for room in self.state["/api/rooms"]:
                 if room["id"] == content["id"]:
+                    if room.get("zone") == "Living" and "type" in content.get("regulation", {}):
+                        return 400, {
+                            "errorMessages": [
+                                "Can't change regulation type of rooms that are part of the"
+                                " Living Zone"
+                            ]
+                        }
                     for key, value in content.items():
                         if isinstance(value, dict):
                             room.setdefault(key, {}).update(value)
                         else:
                             room[key] = value
+            return 200, None
+        if method == "PATCH" and uri == "/api/zones/living":
+            for room in self.state["/api/rooms"]:
+                if room.get("zone") == "Living" and "regulationType" in content:
+                    room["regulation"]["type"] = content["regulationType"]
             return 200, None
         if method == "PUT" and uri.startswith("/api/modes/"):
             for mode in self.state["/api/modes"]:

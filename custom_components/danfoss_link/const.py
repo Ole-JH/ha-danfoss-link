@@ -18,6 +18,8 @@ MIN_SCAN_INTERVAL: Final = 20
 # Room regulation types used by the CC
 REGULATION_SCHEDULE: Final = "Schedule"
 REGULATION_MANUAL: Final = "Manual"
+# Rooms in this zone share one regulation type and schedule, set on the zone.
+ZONE_LIVING: Final = "Living"
 
 # House modes and their REST endpoints (/api/modes/<endpoint>)
 MODE_AT_HOME: Final = "AtHome"

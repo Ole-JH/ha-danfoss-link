@@ -229,9 +229,9 @@ PATCH api/zones/living <- {"name": ..., "schedule": {...}}   (living zone)
   `{"name": "Living", "schedule": {...}}` or
   `{"name": "Living", "regulationType": "Manual"|"Schedule"}` (note the flat
   `regulationType` key). Comfort/away setpoints stay per room on
-  `api/rooms/{id}`. The app never sends `regulation.type` or `schedule` to
-  `api/rooms/{id}` for a living-zone room; whether the CC accepts that is
-  untested.
+  `api/rooms/{id}`. Sending `regulation.type` to `api/rooms/{id}` for a
+  living-zone room fails (seen on Ole's CC): HTTP 400 "Can't change
+  regulation type of rooms that are part of the Living Zone".
 - The system-wide schedule (`schedule` / `normalSchedule` in
   `api/system/status`) is a flat period list for today, read-only in the app.
 - On/off devices have their own schedule via `PatchOnOffDeviceRequest`

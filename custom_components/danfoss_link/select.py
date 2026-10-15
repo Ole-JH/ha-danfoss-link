@@ -118,8 +118,4 @@ class DanfossLinkRoomMode(DanfossLinkRoomEntity, SelectEntity):
         return _REGULATION_OPTIONS.get(regulation)
 
     async def async_select_option(self, option: str) -> None:
-        await self.coordinator.async_write(
-            "PATCH",
-            self.room_uri,
-            {"id": self.room_id, "regulation": {"type": _REGULATION_TYPES[option]}},
-        )
+        await self.async_set_regulation_type(_REGULATION_TYPES[option])

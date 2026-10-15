@@ -7,7 +7,7 @@ from typing import Any
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MANUFACTURER
+from .const import DOMAIN, MANUFACTURER, ZONE_LIVING
 from .coordinator import DanfossLinkCoordinator
 
 
@@ -62,3 +62,17 @@ class DanfossLinkRoomEntity(CoordinatorEntity[DanfossLinkCoordinator]):
     @property
     def room_uri(self) -> str:
         return f"/api/rooms/{self.room_id}"
+
+    async def async_set_regulation_type(self, regulation_type: str) -> None:
+        """Switch between Schedule and Manual; living-zone rooms switch as a zone."""
+        if self.room.get("zone") == ZONE_LIVING:
+            # The CC rejects this on a single living-zone room (HTTP 400).
+            await self.coordinator.async_write(
+                "PATCH",
+                "/api/zones/living",
+                {"name": ZONE_LIVING, "regulationType": regulation_type},
+            )
+            return
+        await self.coordinator.async_write(
+            "PATCH", self.room_uri, {"id": self.room_id, "regulation": {"type": regulation_type}}
+        )
