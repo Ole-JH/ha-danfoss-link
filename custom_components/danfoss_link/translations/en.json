@@ -139,6 +139,13 @@
       }
     },
     "binary_sensor": {
+      "living_zone": {
+        "name": "Living zone",
+        "state": {
+          "off": "Nej",
+          "on": "Ja"
+        }
+      },
       "radio": {
         "name": "Radio connection"
       }

@@ -254,6 +254,12 @@ async def test_diagnostic_entities(hass: HomeAssistant, fake: FakeMDG) -> None:
     assert hass.states.get("sensor.my_home_wi_fi_signal").state == "-61"
 
 
+async def test_living_zone_sensor(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    assert hass.states.get("binary_sensor.living_room_living_zone").state == "on"
+    assert hass.states.get("binary_sensor.bathroom_living_zone").state == "off"
+
+
 async def test_diagnostic_entities_disabled_by_default(hass: HomeAssistant, fake: FakeMDG) -> None:
     entry = await _setup(hass)
     registry = er.async_get(hass)

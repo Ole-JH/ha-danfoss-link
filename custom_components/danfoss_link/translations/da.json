@@ -127,6 +127,13 @@
       }
     },
     "binary_sensor": {
+      "living_zone": {
+        "name": "Opholdszone",
+        "state": {
+          "off": "Nej",
+          "on": "Ja"
+        }
+      },
       "radio": {
         "name": "Radioforbindelse"
       }

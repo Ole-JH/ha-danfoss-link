@@ -1,8 +1,8 @@
-"""Binary sensors: per-room battery and radio problems, read from the CC's alarms.
+"""Binary sensors: living-zone membership, and battery and radio problems from alarms.
 
 The CC does not report battery level or radio signal per thermostat; the app
 only learns about them through alarms (``titleTextId`` is the app's string
-resource name). These sensors are diagnostic and disabled by default.
+resource name). These two are diagnostic and disabled by default.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .const import ZONE_LIVING
 from .coordinator import DanfossLinkConfigEntry, DanfossLinkCoordinator
 from .entity import DanfossLinkRoomEntity
 
@@ -37,6 +38,7 @@ async def async_setup_entry(
     for room_id in coordinator.data.rooms:
         entities.append(DanfossLinkRoomBattery(coordinator, room_id))
         entities.append(DanfossLinkRoomConnectivity(coordinator, room_id))
+        entities.append(DanfossLinkRoomLivingZone(coordinator, room_id))
     async_add_entities(entities)
 
 
@@ -85,3 +87,17 @@ class DanfossLinkRoomConnectivity(_RoomAlarmSensor):
     @property
     def is_on(self) -> bool:
         return not self._alarms(ALARM_NODE_DEAD)
+
+
+class DanfossLinkRoomLivingZone(DanfossLinkRoomEntity, BinarySensorEntity):
+    """On when the room is in the living zone, whose rooms share mode and schedule."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_translation_key = "living_zone"
+
+    def __init__(self, coordinator: DanfossLinkCoordinator, room_id: int) -> None:
+        super().__init__(coordinator, room_id, "living_zone")
+
+    @property
+    def is_on(self) -> bool:
+        return self.room.get("zone") == ZONE_LIVING
