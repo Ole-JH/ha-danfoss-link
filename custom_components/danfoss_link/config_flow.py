@@ -50,6 +50,8 @@ from .coordinator import DanfossLinkConfigEntry
 _LOGGER = logging.getLogger(__name__)
 
 _MULTILINE = TextSelector(TextSelectorConfig(multiline=True))
+# Asked during setup too, so new installs can start without notifications.
+_NOTIFICATIONS_FIELD = {vol.Required(CONF_ALARM_NOTIFICATIONS, default=True): BooleanSelector()}
 
 
 def _credentials_schema(defaults: dict[str, Any]) -> vol.Schema:
@@ -157,6 +159,7 @@ class DanfossLinkConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._paired: AppIdentity | None = None
+        self._options: dict[str, Any] = {}
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         return self.async_show_menu(step_id="user", menu_options=["pair", "credentials"])
@@ -165,6 +168,7 @@ class DanfossLinkConfigFlow(ConfigFlow, domain=DOMAIN):
         """Pair a new identity using the code shown on the CC."""
         errors: dict[str, str] = {}
         if user_input is not None:
+            self._options = {CONF_ALARM_NOTIFICATIONS: user_input[CONF_ALARM_NOTIFICATIONS]}
             try:
                 self._paired = await self.hass.async_add_executor_job(
                     pair_with_code, user_input[CONF_CODE]
@@ -182,7 +186,7 @@ class DanfossLinkConfigFlow(ConfigFlow, domain=DOMAIN):
                 return await self.async_step_verify()
         return self.async_show_form(
             step_id="pair",
-            data_schema=vol.Schema({vol.Required(CONF_CODE): str}),
+            data_schema=vol.Schema({vol.Required(CONF_CODE): str, **_NOTIFICATIONS_FIELD}),
             errors=errors,
         )
 
@@ -199,7 +203,7 @@ class DanfossLinkConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_show_form(step_id="verify", errors=errors)
         await self.async_set_unique_id(data[CONF_PEER_ID])
         self._abort_if_unique_id_configured()
-        return self.async_create_entry(title=title, data=data)
+        return self.async_create_entry(title=title, data=data, options=self._options)
 
     async def async_step_credentials(
         self, user_input: dict[str, Any] | None = None
@@ -213,10 +217,14 @@ class DanfossLinkConfigFlow(ConfigFlow, domain=DOMAIN):
             if not errors:
                 await self.async_set_unique_id(data[CONF_PEER_ID])
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title=title, data=data)
+                return self.async_create_entry(
+                    title=title,
+                    data=data,
+                    options={CONF_ALARM_NOTIFICATIONS: user_input[CONF_ALARM_NOTIFICATIONS]},
+                )
         return self.async_show_form(
             step_id="credentials",
-            data_schema=_credentials_schema(user_input or {}),
+            data_schema=_credentials_schema(user_input or {}).extend(_NOTIFICATIONS_FIELD),
             errors=errors,
         )
 

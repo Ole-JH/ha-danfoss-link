@@ -13,10 +13,12 @@
         "title": "Par med din Danfoss Link CC",
         "description": "Start parring af en ny app på CC'en (som da du parrede din telefon), og indtast den kode, den viser. Home Assistant parres som sin egen app, adskilt fra Danfoss Link-appen på din telefon. CC'en skal være forbundet til internettet.",
         "data": {
-          "code": "Parringskode"
+          "code": "Parringskode",
+          "alarm_notifications": "Alarmnotifikationer"
         },
         "data_description": {
-          "code": "Koden, der vises på CC'ens skærm. Bindestreger og mellemrum ignoreres."
+          "code": "Koden, der vises på CC'ens skærm. Bindestreger og mellemrum ignoreres.",
+          "alarm_notifications": "Vis hver ulæst alarm i notifikationspanelet. Når du afviser en notifikation, markeres alarmen som læst. Du kan ændre det senere under Konfigurer."
         }
       },
       "verify": {
@@ -29,12 +31,14 @@
         "data": {
           "cert_pem": "App-certifikat (app_cert.pem)",
           "key_pem": "Appens private nøgle (app_key.pem)",
-          "peer_id": "CC'ens peer-ID"
+          "peer_id": "CC'ens peer-ID",
+          "alarm_notifications": "Alarmnotifikationer"
         },
         "data_description": {
           "cert_pem": "Starter med -----BEGIN CERTIFICATE-----",
           "key_pem": "Starter med -----BEGIN PRIVATE KEY----- eller -----BEGIN EC PRIVATE KEY-----",
-          "peer_id": "20 bytes hex fra appens pairings-mappe, f.eks. e7:af:e3:77:..."
+          "peer_id": "20 bytes hex fra appens pairings-mappe, f.eks. e7:af:e3:77:...",
+          "alarm_notifications": "Vis hver ulæst alarm i notifikationspanelet. Når du afviser en notifikation, markeres alarmen som læst. Du kan ændre det senere under Konfigurer."
         }
       },
       "reconfigure": {

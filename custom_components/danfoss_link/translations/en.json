@@ -13,10 +13,12 @@
         "title": "Pair with your Danfoss Link CC",
         "description": "On the CC, start pairing a new app (as when you paired your phone) and enter the code it shows. Home Assistant is paired as its own app, separate from the Danfoss Link app on your phone. The CC must be connected to the internet.",
         "data": {
-          "code": "Pairing code"
+          "code": "Pairing code",
+          "alarm_notifications": "Alarm notifications"
         },
         "data_description": {
-          "code": "The code shown on the CC display. Dashes and spaces are ignored."
+          "code": "The code shown on the CC display. Dashes and spaces are ignored.",
+          "alarm_notifications": "Show each unread alarm in the notification drawer. Dismissing a notification marks the alarm as read. You can change this later under Configure."
         }
       },
       "verify": {
@@ -29,12 +31,14 @@
         "data": {
           "cert_pem": "App certificate (app_cert.pem)",
           "key_pem": "App private key (app_key.pem)",
-          "peer_id": "CC peer ID"
+          "peer_id": "CC peer ID",
+          "alarm_notifications": "Alarm notifications"
         },
         "data_description": {
           "cert_pem": "Starts with -----BEGIN CERTIFICATE-----",
           "key_pem": "Starts with -----BEGIN PRIVATE KEY----- or -----BEGIN EC PRIVATE KEY-----",
-          "peer_id": "20 bytes of hex from the app's pairings folder, e.g. e7:af:e3:77:..."
+          "peer_id": "20 bytes of hex from the app's pairings folder, e.g. e7:af:e3:77:...",
+          "alarm_notifications": "Show each unread alarm in the notification drawer. Dismissing a notification marks the alarm as read. You can change this later under Configure."
         }
       },
       "reconfigure": {

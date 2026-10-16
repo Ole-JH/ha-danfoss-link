@@ -110,6 +110,7 @@ async def test_user_flow(hass: HomeAssistant, fake: FakeMDG) -> None:
     assert result["title"] == "My home"
     assert result["data"][CONF_PEER_ID] == PEER_ID
     assert result["result"].unique_id == PEER_ID
+    assert result["result"].options == {"alarm_notifications": True}
     await hass.async_block_till_done()
 
 
@@ -679,10 +680,11 @@ async def _start_pair_flow(hass: HomeAssistant) -> ConfigFlowResult:
 async def test_pair_flow(hass: HomeAssistant, pairing: FakeMDG) -> None:
     result = await _start_pair_flow(hass)
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_CODE: PAIRING_CODE}
+        result["flow_id"], {CONF_CODE: PAIRING_CODE, "alarm_notifications": False}
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "My home"
+    assert result["result"].options == {"alarm_notifications": False}
     data = result["data"]
     assert data[CONF_PEER_ID] == pairing.cc_peer_id
     assert result["result"].unique_id == pairing.cc_peer_id
