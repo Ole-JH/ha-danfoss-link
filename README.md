@@ -99,7 +99,7 @@ How the integration compares with the Danfoss Link app (1.3.x).
 | Planned vacation with dates | ✅ | `plan_vacation` / `cancel_vacation` actions |
 | On/off devices | ✅ | Switch entities |
 | Alarms (low battery, lost device, ...) | ✅ | A notification per unread alarm, unread alarms sensor, battery and radio connection binary sensors |
-| Mark alarms as read | ✅ | Dismiss the notification, or press the Mark alarms as read button |
+| Mark alarms as read | ✅ | Dismiss the notification, or press the Mark alarms as read button. Notifications can be turned off in the integration's options |
 | CC Wi-Fi signal | ✅ | Diagnostic sensor |
 | Pair a new app with a CC code | ✅ | Config flow (cloud pairing codes only) |
 | Weekly schedules (rooms, living zone) | ❌ | Not yet; the CC's API supports it |

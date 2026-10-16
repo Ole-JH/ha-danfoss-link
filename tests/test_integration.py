@@ -198,11 +198,11 @@ async def test_options_flow(hass: HomeAssistant, fake: FakeMDG) -> None:
     entry = await _setup(hass)
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_SCAN_INTERVAL: 120}
+        result["flow_id"], {CONF_SCAN_INTERVAL: 120, "alarm_notifications": True}
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
-    assert entry.options == {CONF_SCAN_INTERVAL: 120}
+    assert entry.options == {CONF_SCAN_INTERVAL: 120, "alarm_notifications": True}
     assert entry.runtime_data.update_interval.total_seconds() == 120
 
 
@@ -473,6 +473,24 @@ async def test_alarm_notification(hass: HomeAssistant, fake: FakeMDG) -> None:
 
     await hass.config_entries.async_unload(entry.entry_id)
     assert not _alarm_notifications(hass)
+    assert not _alarm_writes(fake)
+
+
+async def test_alarm_notifications_can_be_turned_off(hass: HomeAssistant, fake: FakeMDG) -> None:
+    entry = await _setup(hass)
+    assert len(_alarm_notifications(hass)) == 1
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_SCAN_INTERVAL: 60, "alarm_notifications": False}
+    )
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    assert not _alarm_notifications(hass)
+    fake.state["/api/alarms"].append({"id": 4, "isRead": False})
+    await _refresh(hass, entry)
+    assert not _alarm_notifications(hass)
+    # The sensor and button still work.
+    assert hass.states.get("sensor.my_home_unread_alarms").state == "2"
     assert not _alarm_writes(fake)
 
 

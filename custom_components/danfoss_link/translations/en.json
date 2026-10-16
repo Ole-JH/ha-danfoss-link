@@ -68,10 +68,12 @@
     "step": {
       "init": {
         "data": {
-          "scan_interval": "Polling interval"
+          "scan_interval": "Polling interval",
+          "alarm_notifications": "Alarm notifications"
         },
         "data_description": {
-          "scan_interval": "How often to read the CC. Every poll goes through the Danfoss cloud."
+          "scan_interval": "How often to read the CC. Every poll goes through the Danfoss cloud.",
+          "alarm_notifications": "Show each unread alarm in the notification drawer. Dismissing a notification marks the alarm as read."
         }
       }
     }

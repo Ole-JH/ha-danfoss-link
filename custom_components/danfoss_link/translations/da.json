@@ -68,10 +68,12 @@
     "step": {
       "init": {
         "data": {
-          "scan_interval": "Opdateringsinterval"
+          "scan_interval": "Opdateringsinterval",
+          "alarm_notifications": "Alarmnotifikationer"
         },
         "data_description": {
-          "scan_interval": "Hvor ofte CC'en skal aflæses. Hver aflæsning går gennem Danfoss-skyen."
+          "scan_interval": "Hvor ofte CC'en skal aflæses. Hver aflæsning går gennem Danfoss-skyen.",
+          "alarm_notifications": "Vis hver ulæst alarm i notifikationspanelet. Når du afviser en notifikation, markeres alarmen som læst."
         }
       }
     }

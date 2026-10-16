@@ -10,7 +10,14 @@ from homeassistant.helpers.typing import ConfigType
 
 from .alarms import AlarmNotifier
 from .api import AppIdentity, DanfossLinkClient, InvalidCredentials
-from .const import CONF_CERT_PEM, CONF_KEY_PEM, CONF_PEER_ID, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import (
+    CONF_ALARM_NOTIFICATIONS,
+    CONF_CERT_PEM,
+    CONF_KEY_PEM,
+    CONF_PEER_ID,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+)
 from .coordinator import DanfossLinkConfigEntry, DanfossLinkCoordinator
 from .services import async_setup_services
 
@@ -59,9 +66,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: DanfossLinkConfigEntry) 
 
     entry.runtime_data = coordinator
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
-    notifier = AlarmNotifier(hass, coordinator)
-    notifier.async_start()
-    entry.async_on_unload(notifier.async_stop)
+    if entry.options.get(CONF_ALARM_NOTIFICATIONS, True):
+        notifier = AlarmNotifier(hass, coordinator)
+        notifier.async_start()
+        entry.async_on_unload(notifier.async_stop)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

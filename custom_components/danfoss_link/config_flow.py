@@ -12,6 +12,7 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFl
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -35,6 +36,7 @@ from .api import (
     pair_with_code,
 )
 from .const import (
+    CONF_ALARM_NOTIFICATIONS,
     CONF_CERT_PEM,
     CONF_CODE,
     CONF_KEY_PEM,
@@ -243,14 +245,18 @@ class DanfossLinkConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class DanfossLinkOptionsFlow(OptionsFlow):
-    """Polling interval."""
+    """Polling interval and alarm notifications."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:
             return self.async_create_entry(
-                data={CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL])}
+                data={
+                    CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL]),
+                    CONF_ALARM_NOTIFICATIONS: user_input[CONF_ALARM_NOTIFICATIONS],
+                }
             )
-        current = self.config_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        options = self.config_entry.options
+        current = options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
@@ -263,7 +269,11 @@ class DanfossLinkOptionsFlow(OptionsFlow):
                             unit_of_measurement="s",
                             mode=NumberSelectorMode.BOX,
                         )
-                    )
+                    ),
+                    vol.Required(
+                        CONF_ALARM_NOTIFICATIONS,
+                        default=options.get(CONF_ALARM_NOTIFICATIONS, True),
+                    ): BooleanSelector(),
                 }
             ),
         )

@@ -12,6 +12,8 @@ CONF_KEY_PEM: Final = "key_pem"
 CONF_PEER_ID: Final = "peer_id"
 CONF_CODE: Final = "code"
 
+CONF_ALARM_NOTIFICATIONS: Final = "alarm_notifications"
+
 DEFAULT_SCAN_INTERVAL: Final = 60
 MIN_SCAN_INTERVAL: Final = 20
 
