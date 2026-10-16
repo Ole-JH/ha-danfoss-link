@@ -261,6 +261,32 @@ is the separate "home now" button. The integration therefore shows
 `{"type": "AtHome", "state": "Inactive"}`, and exposes `currentState` as a
 House state sensor.
 
+Planned vacation (`S.k.z()`, `b0.d` vacation calendar, `S.e` timestamp
+helpers in APK 1.3.10):
+
+```
+PUT api/modes/vacation <- {"type": "Vacation", "state": "Active",
+                           "startTime": T, "endTime": T}
+PUT api/modes/vacation <- {"type": "Vacation", "state": "Inactive"}   (cancel / end)
+```
+
+- The app sends `state: Active` with both dates; the CC reports the mode as
+  `Planned` until the start time (the app's built-in demo CC does exactly
+  this; not yet seen on a real CC). The app treats a Vacation mode with both
+  dates as "vacation planned" whatever its state, and pre-fills the calendar
+  from them. Cancelling is the same `Inactive` PUT as ending a vacation.
+- The calendar only checks `start < end` and `end > now`; times are whole
+  hours (the picker sets the hour, minutes and seconds are 0).
+- Timestamps are `yyyy-MM-dd'T'HH:mm:ss`. The app learns the format from
+  `api/system/info` `systemTime`: if it ends in `Z`, timestamps are UTC, sent
+  with a `Z` suffix and read from `startTimeUtc` / `endTimeUtc`; if it ends in
+  an offset (`+02:00`), they are CC local time sent without a suffix and read
+  from `startTime` / `endTime`. Values outside 1970-2099 mean "no date".
+- Pause takes an optional `endTime` the same way (`S.k.m()`), not used here.
+
+The integration exposes this as the `danfoss_link.plan_vacation` and
+`danfoss_link.cancel_vacation` actions plus Vacation start/end sensors.
+
 ### Reconstructed protobuf schemas
 
 Reconstructed from the descriptor tables in `mdg_*_pb.lua` (field names,

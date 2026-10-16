@@ -53,12 +53,28 @@ up, and [Troubleshooting](#troubleshooting) if a step fails.
 | `select` house mode | CC | Schedule (no override) / At home / Vacation / Pause (/ Boost if your CC has it) |
 | `sensor` house state | CC | What the CC is doing now: at home / away / asleep from the schedule, or the active mode |
 | `number` vacation temperature | CC | Temperature used in vacation mode |
+| `sensor` vacation start / end | CC | When a planned or running vacation starts and ends; unknown when none is planned |
 | `switch` | on/off device | Link on/off outputs |
 | `sensor` unread alarms | CC | Count plus details (low battery, lost device, ...) |
 | `binary_sensor` living zone | room | On when the room is in the living zone. Its rooms share one Schedule/Manual mode and one schedule, so changing one changes all. |
 | `binary_sensor` battery | room | Low battery on a device in the room, from the CC's alarms. *Disabled by default.* |
 | `binary_sensor` radio connection | room | Off when the CC has lost contact with a device in the room. *Disabled by default.* |
 | `sensor` Wi-Fi signal | CC | The CC's Wi-Fi signal strength. *Disabled by default.* |
+
+### Planned vacation
+
+Plan a vacation ahead with the **Danfoss Link: Plan vacation** action
+(`danfoss_link.plan_vacation`), just like the app's vacation calendar. The CC
+switches to vacation mode at the start time and back to the schedule at the
+end. **Cancel vacation** (`danfoss_link.cancel_vacation`) removes the plan or
+ends a running vacation.
+
+```yaml
+action: danfoss_link.plan_vacation
+data:
+  start: "2026-12-20 08:00:00"
+  end: "2026-12-27 16:00:00"
+```
 
 Diagnostic entities marked *disabled by default* can be turned on under the
 device's entity list in Home Assistant.

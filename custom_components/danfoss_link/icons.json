@@ -1,0 +1,10 @@
+{
+  "services": {
+    "plan_vacation": {
+      "service": "mdi:airplane-takeoff"
+    },
+    "cancel_vacation": {
+      "service": "mdi:airplane-off"
+    }
+  }
+}

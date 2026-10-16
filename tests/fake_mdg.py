@@ -88,7 +88,8 @@ ROOMS = [
 def initial_state() -> dict[str, Any]:
     return {
         "/api/system/info": {"name": "My home", "serialNo": "123456", "version": "4.2.1797",
-                             "wifiSignalStrengthDb": -61},
+                             "wifiSignalStrengthDb": -61,
+                             "systemTime": "2026-10-16T05:00:00Z"},
         "/api/system/status": {"currentState": "AtHome"},
         "/api/rooms": copy.deepcopy(ROOMS),
         # Following the schedule: no mode is active (as on a real CC).
@@ -424,7 +425,16 @@ class FakeMDG:
         if method == "PUT" and uri.startswith("/api/modes/"):
             for mode in self.state["/api/modes"]:
                 if mode["type"] == content["type"]:
-                    mode["state"] = content["state"]
+                    mode.pop("startTime", None)
+                    mode.pop("endTime", None)
+                    mode.update(content)
+                    # Like the app's demo CC: a vacation with a start is planned.
+                    if (
+                        mode["type"] == "Vacation"
+                        and "startTime" in content
+                        and mode["state"] == "Active"
+                    ):
+                        mode["state"] = "Planned"
                 elif content["state"] == "Active":
                     mode["state"] = "Inactive"
             return 200, None

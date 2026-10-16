@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -17,6 +18,8 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .cc_time import parse_cc_time
+from .const import MODE_ACTIVE, MODE_PLANNED, MODE_VACATION
 from .coordinator import DanfossLinkConfigEntry, DanfossLinkCoordinator
 from .entity import DanfossLinkEntity, DanfossLinkRoomEntity
 
@@ -37,6 +40,10 @@ async def async_setup_entry(
     entities.append(DanfossLinkAlarms(coordinator))
     if coordinator.data.status.get("currentState"):
         entities.append(DanfossLinkHouseState(coordinator))
+    if any(mode.get("type") == MODE_VACATION for mode in coordinator.data.modes):
+        entities.extend(
+            DanfossLinkVacationTime(coordinator, key) for key in ("startTime", "endTime")
+        )
     if "wifiSignalStrengthDb" in coordinator.data.info:
         entities.append(DanfossLinkWifiSignal(coordinator))
     async_add_entities(entities)
@@ -136,3 +143,24 @@ class DanfossLinkWifiSignal(DanfossLinkEntity, SensorEntity):
     @property
     def native_value(self) -> int | None:
         return self.coordinator.data.info.get("wifiSignalStrengthDb")
+
+
+class DanfossLinkVacationTime(DanfossLinkEntity, SensorEntity):
+    """Start or end of a planned or running vacation; unknown when there is none."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(self, coordinator: DanfossLinkCoordinator, key: str) -> None:
+        self._key = key
+        self._attr_translation_key = "vacation_start" if key == "startTime" else "vacation_end"
+        super().__init__(coordinator, self._attr_translation_key)
+
+    @property
+    def native_value(self) -> datetime | None:
+        for mode in self.coordinator.data.modes:
+            if mode.get("type") == MODE_VACATION and mode.get("state") in (
+                MODE_ACTIVE,
+                MODE_PLANNED,
+            ):
+                return parse_cc_time(mode, self._key, self.coordinator.data.info)
+        return None

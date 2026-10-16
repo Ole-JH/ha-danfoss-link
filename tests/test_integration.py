@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 import functools
 import json
 from pathlib import Path
@@ -30,7 +31,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -41,6 +42,7 @@ from custom_components.danfoss_link.api import (
     pair_with_code,
     pairing as pairing_module,
 )
+from custom_components.danfoss_link.cc_time import parse_cc_time
 from custom_components.danfoss_link.const import (
     CONF_CERT_PEM,
     CONF_CODE,
@@ -418,6 +420,95 @@ async def test_switch_and_numbers(hass: HomeAssistant, fake: FakeMDG) -> None:
     await hass.async_block_till_done()
     assert hass.states.get("switch.my_home_towel_rail").state == "on"
     assert hass.states.get("number.living_room_away_temperature").state == "16.5"
+
+
+def _vacation_writes(fake: FakeMDG) -> list:
+    return [r for r in fake.requests if r[0] == "PUT" and r[1] == "/api/modes/vacation"]
+
+
+async def test_plan_vacation(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    assert hass.states.get("sensor.my_home_vacation_start").state == "unknown"
+    # Naive times from the datetime selector are HA local time (US/Pacific in tests).
+    await hass.services.async_call(
+        DOMAIN,
+        "plan_vacation",
+        {"start": "2030-07-01 12:00:00", "end": "2030-07-08 18:30:45"},
+        blocking=True,
+    )
+    assert _vacation_writes(fake) == [
+        (
+            "PUT",
+            "/api/modes/vacation",
+            {
+                "type": "Vacation",
+                "state": "Active",
+                "startTime": "2030-07-01T19:00:00Z",
+                "endTime": "2030-07-09T01:30:00Z",
+            },
+        )
+    ]
+    await hass.async_block_till_done()
+    # Planned, not active yet: the house keeps following its schedule.
+    assert hass.states.get("select.my_home_house_mode").state == "schedule"
+    assert hass.states.get("sensor.my_home_vacation_start").state == "2030-07-01T19:00:00+00:00"
+    assert hass.states.get("sensor.my_home_vacation_end").state == "2030-07-09T01:30:00+00:00"
+
+    fake.requests.clear()
+    await hass.services.async_call(DOMAIN, "cancel_vacation", {}, blocking=True)
+    assert _vacation_writes(fake) == [
+        ("PUT", "/api/modes/vacation", {"type": "Vacation", "state": "Inactive"})
+    ]
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.my_home_vacation_start").state == "unknown"
+    assert hass.states.get("sensor.my_home_vacation_end").state == "unknown"
+
+
+async def test_plan_vacation_cc_local_time(hass: HomeAssistant, fake: FakeMDG) -> None:
+    # A CC that reports its offset expects local time without a suffix.
+    fake.state["/api/system/info"]["systemTime"] = "2026-10-16T07:00:00+02:00"
+    await _setup(hass)
+    await hass.services.async_call(
+        DOMAIN,
+        "plan_vacation",
+        {"start": "2030-07-01T10:00:00+00:00", "end": "2030-07-02T10:00:00+00:00"},
+        blocking=True,
+    )
+    content = _vacation_writes(fake)[0][2]
+    assert content["startTime"] == "2030-07-01T12:00:00"
+    assert content["endTime"] == "2030-07-02T12:00:00"
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.my_home_vacation_start").state == "2030-07-01T10:00:00+00:00"
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "error"),
+    [
+        ("2030-07-08 12:00:00", "2030-07-01 12:00:00", "end_before_start"),
+        ("2020-01-01 12:00:00", "2020-01-02 12:00:00", "end_in_past"),
+    ],
+)
+async def test_plan_vacation_invalid(
+    hass: HomeAssistant, fake: FakeMDG, start: str, end: str, error: str
+) -> None:
+    await _setup(hass)
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            DOMAIN, "plan_vacation", {"start": start, "end": end}, blocking=True
+        )
+    assert err.value.translation_key == error
+    assert _vacation_writes(fake) == []
+
+
+def test_parse_cc_time() -> None:
+    info = {"systemTime": "2026-10-16T05:00:00Z"}
+    # UTC CCs: the app reads the "...Utc" keys first.
+    mode = {"startTime": "2030-07-01T12:00:00", "startTimeUtc": "2030-07-01T10:00:00Z"}
+    assert parse_cc_time(mode, "startTime", info) == datetime(2030, 7, 1, 10, tzinfo=UTC)
+    local = {"systemTime": "2026-10-16T07:00:00+02:00"}
+    assert parse_cc_time(mode, "startTime", local) == datetime(2030, 7, 1, 10, tzinfo=UTC)
+    assert parse_cc_time({"endTime": "2100-01-01T00:00:00Z"}, "endTime", info) is None
+    assert parse_cc_time({}, "endTime", info) is None
 
 
 async def test_diagnostics_redacts_secrets(hass: HomeAssistant, fake: FakeMDG) -> None:

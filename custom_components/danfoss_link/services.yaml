@@ -1,0 +1,22 @@
+plan_vacation:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: danfoss_link
+    start:
+      required: true
+      selector:
+        datetime:
+    end:
+      required: true
+      selector:
+        datetime:
+cancel_vacation:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: danfoss_link

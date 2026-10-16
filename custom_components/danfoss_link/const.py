@@ -23,6 +23,7 @@ ZONE_LIVING: Final = "Living"
 
 # House modes and their REST endpoints (/api/modes/<endpoint>)
 MODE_AT_HOME: Final = "AtHome"
+MODE_VACATION: Final = "Vacation"
 MODE_ENDPOINTS: Final = {
     "AtHome": "athome",
     "Vacation": "vacation",
@@ -31,3 +32,5 @@ MODE_ENDPOINTS: Final = {
 }
 MODE_ACTIVE: Final = "Active"
 MODE_INACTIVE: Final = "Inactive"
+# A vacation with a start time in the future
+MODE_PLANNED: Final = "Planned"

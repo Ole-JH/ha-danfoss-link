@@ -104,6 +104,7 @@
       "house_mode": {
         "name": "Husets tilstand",
         "state": {
+          "schedule": "Ugeprogram",
           "at_home": "Hjemme",
           "vacation": "Ferie",
           "pause": "Pause",
@@ -124,6 +125,12 @@
       },
       "wifi_signal": {
         "name": "Wi-Fi-signal"
+      },
+      "vacation_start": {
+        "name": "Ferie starter"
+      },
+      "vacation_end": {
+        "name": "Ferie slutter"
       }
     },
     "binary_sensor": {
@@ -137,6 +144,50 @@
       "radio": {
         "name": "Radioforbindelse"
       }
+    }
+  },
+  "services": {
+    "plan_vacation": {
+      "name": "Planlæg ferie",
+      "description": "Planlægger en ferie på CC'en. Ferietemperaturen gælder fra start til slut, derefter følger CC'en ugeprogrammet igen. En ny plan erstatter den gamle.",
+      "fields": {
+        "config_entry_id": {
+          "name": "CC",
+          "description": "Hvilken CC. Kan udelades, hvis du kun har én."
+        },
+        "start": {
+          "name": "Start",
+          "description": "Hvornår ferien starter."
+        },
+        "end": {
+          "name": "Slut",
+          "description": "Hvornår ferien slutter, og du er hjemme igen."
+        }
+      }
+    },
+    "cancel_vacation": {
+      "name": "Annuller ferie",
+      "description": "Annullerer en planlagt ferie eller afslutter en igangværende ferie.",
+      "fields": {
+        "config_entry_id": {
+          "name": "CC",
+          "description": "Hvilken CC. Kan udelades, hvis du kun har én."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "end_before_start": {
+      "message": "Ferien skal slutte efter den starter."
+    },
+    "end_in_past": {
+      "message": "Ferien skal slutte i fremtiden."
+    },
+    "choose_config_entry": {
+      "message": "Du har flere CC'er. Vælg hvilken."
+    },
+    "not_loaded": {
+      "message": "Danfoss Link CC'en er ikke indlæst."
     }
   }
 }

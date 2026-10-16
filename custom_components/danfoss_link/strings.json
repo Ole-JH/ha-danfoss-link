@@ -136,6 +136,12 @@
       },
       "wifi_signal": {
         "name": "Wi-Fi signal"
+      },
+      "vacation_start": {
+        "name": "Vacation start"
+      },
+      "vacation_end": {
+        "name": "Vacation end"
       }
     },
     "binary_sensor": {
@@ -149,6 +155,50 @@
       "radio": {
         "name": "Radio connection"
       }
+    }
+  },
+  "services": {
+    "plan_vacation": {
+      "name": "Plan vacation",
+      "description": "Plans a vacation on the CC. The vacation temperature applies from start to end, then the CC follows its weekly schedule again. A new plan replaces the previous one.",
+      "fields": {
+        "config_entry_id": {
+          "name": "CC",
+          "description": "Which CC. Can be left out if you have only one."
+        },
+        "start": {
+          "name": "Start",
+          "description": "When the vacation starts."
+        },
+        "end": {
+          "name": "End",
+          "description": "When the vacation ends and you are back home."
+        }
+      }
+    },
+    "cancel_vacation": {
+      "name": "Cancel vacation",
+      "description": "Cancels a planned vacation or ends a running one.",
+      "fields": {
+        "config_entry_id": {
+          "name": "CC",
+          "description": "Which CC. Can be left out if you have only one."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "end_before_start": {
+      "message": "The vacation must end after it starts."
+    },
+    "end_in_past": {
+      "message": "The vacation must end in the future."
+    },
+    "choose_config_entry": {
+      "message": "You have more than one CC. Choose which one."
+    },
+    "not_loaded": {
+      "message": "The Danfoss Link CC is not loaded."
     }
   }
 }
