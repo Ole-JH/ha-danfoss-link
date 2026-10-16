@@ -142,8 +142,8 @@
       "living_zone": {
         "name": "Living zone",
         "state": {
-          "off": "Nej",
-          "on": "Ja"
+          "off": "No",
+          "on": "Yes"
         }
       },
       "radio": {

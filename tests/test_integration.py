@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 import functools
+import json
+from pathlib import Path
 import shutil
 from unittest.mock import PropertyMock, patch
 
@@ -519,3 +521,10 @@ async def test_pair_flow_already_configured(hass: HomeAssistant, pairing: FakeMD
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+
+
+def test_english_translation_matches_strings() -> None:
+    base = Path(__file__).parent.parent / "custom_components" / "danfoss_link"
+    strings = json.loads((base / "strings.json").read_text())
+    assert json.loads((base / "translations" / "en.json").read_text()) == strings
+    assert strings["entity"]["binary_sensor"]["living_zone"]["state"] == {"off": "No", "on": "Yes"}
