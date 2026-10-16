@@ -83,6 +83,33 @@ Each room is its own device (linked to the CC device), so you can put it in an a
 Polling runs every 60 s by default (configurable down to 20 s); changes are sent
 immediately.
 
+### Feature coverage
+
+How the integration compares with the Danfoss Link app (1.3.x).
+
+| App feature | In Home Assistant | Notes |
+|---|---|---|
+| Room temperature and target temperature | ✅ | `climate` entity and temperature sensor |
+| Schedule / Manual per room | ✅ | Thermostat Auto/Heat and the room's Mode select |
+| At-home / away temperatures | ✅ | Number entities per room |
+| Living zone (shared mode for its rooms) | ✅ | Mode changes are sent to the whole zone |
+| House modes: at home, vacation, pause, boost | ✅ | House mode select and house state sensor |
+| Vacation temperature | ✅ | Number entity |
+| Planned vacation with dates | ✅ | `plan_vacation` / `cancel_vacation` actions |
+| On/off devices | ✅ | Switch entities |
+| Alarms (low battery, lost device, ...) | ✅ | Unread alarms sensor, battery and radio connection binary sensors |
+| CC Wi-Fi signal | ✅ | Diagnostic sensor |
+| Pair a new app with a CC code | ✅ | Config flow (cloud pairing codes only) |
+| Mark alarms as read | ❌ | Not yet |
+| Weekly schedules (rooms, living zone) | ❌ | Not yet; the CC's API supports it |
+| Schedules for on/off devices | ❌ | Not yet |
+| Pause with an end time | ❌ | Pause can only be switched on and off |
+| Outdoor temperature | ❌ | Not yet |
+| Pause temperature, floor heating limit | ❌ | The app only reads these; not planned |
+| Firmware update | ❌ | Not planned: a failed update could leave the CC unreachable |
+| LAN pairing (`0000` codes) | ❌ | Not supported |
+| Push notifications, multiple homes, renaming | ➖ | Use Home Assistant's own notifications, config entries and names |
+
 ## How it works
 
 ```
