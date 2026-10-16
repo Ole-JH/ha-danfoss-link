@@ -100,6 +100,17 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
 
     async def async_write(self, method: str, uri: str, content: dict[str, Any]) -> None:
         """Send a change to the CC, then refresh."""
+        await self._send(method, uri, content)
+        # Not debounced: the UI should show what the CC accepted right away.
+        await self.async_refresh()
+
+    async def async_mark_alarms_read(self, alarm_ids: list[int]) -> None:
+        """Mark alarms as read, as the app does when one is opened."""
+        for alarm_id in alarm_ids:
+            await self._send("PATCH", f"/api/alarms/{alarm_id}", {"isRead": True, "id": alarm_id})
+        await self.async_refresh()
+
+    async def _send(self, method: str, uri: str, content: dict[str, Any]) -> None:
         _LOGGER.debug("%s %s %s", method, uri, content)
         try:
             await self._call(self.client.request, method, uri, content)
@@ -111,8 +122,6 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
             raise HomeAssistantError(f"Cannot reach the Danfoss Link CC: {err}") from err
         except DanfossLinkError as err:
             raise HomeAssistantError(str(err)) from err
-        # Not debounced: the UI should show what the CC accepted right away.
-        await self.async_refresh()
 
     async def async_close(self) -> None:
         await self._call(self.client.close)

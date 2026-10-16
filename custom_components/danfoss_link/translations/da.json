@@ -144,6 +144,11 @@
       "radio": {
         "name": "Radioforbindelse"
       }
+    },
+    "button": {
+      "mark_alarms_read": {
+        "name": "Marker alarmer som læst"
+      }
     }
   },
   "services": {

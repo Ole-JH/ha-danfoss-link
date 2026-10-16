@@ -1,4 +1,11 @@
 {
+  "entity": {
+    "button": {
+      "mark_alarms_read": {
+        "default": "mdi:bell-check"
+      }
+    }
+  },
   "services": {
     "plan_vacation": {
       "service": "mdi:airplane-takeoff"

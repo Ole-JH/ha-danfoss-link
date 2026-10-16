@@ -167,6 +167,24 @@ Battery and signal (APK 1.3.10 `GetSystemInfoResponse`, `GetAlarmsResponse`,
   `IDS_UA1_ALERTVIEWER_NODE_DEAD_ALERT` (device no longer answers).
 - Alarm `room` is read with `getString`, so it may arrive as a number or a
   string; `node` is the device within the room.
+
+Alarms (APK 1.3.10 `GetAlarmsRequest`, `PatchAlarmRequest`, `GetAlarmsResponse`,
+`StatusActivity`; not yet seen live):
+
+- `GET api/alarms` returns an array of alarms: `id` (int), `isRead` (bool),
+  `createdDate` (`yyyy-MM-dd'T'HH:mm:ss`, no zone), `level` (`Error`,
+  `Warning`, `Notice` or `Debug`), `room`, `node`, `titleTextId`,
+  `descriptionTextId`. Everything but `id` and `isRead` is optional.
+- Mark read / unread: `PATCH api/alarms/{id}` with `{"isRead": true, "id": {id}}`
+  (`false` marks it unread). The response is the single updated alarm object.
+- The app marks a Warning or Notice read when it is expanded in System status,
+  and offers a "Mark as unread" switch for those. Error alarms have no switch
+  and are only marked read when the user taps the phone push notification for
+  them. The app has no request to delete an alarm.
+- The app shows `room` and `node` as raw text after "Room:" / "Device:".
+- The integration shows each unread alarm as a Home Assistant persistent
+  notification, using the app's English or Danish texts for `titleTextId` and
+  `descriptionTextId` (`alarm_texts.py`). Dismissing it sends the PATCH above.
 - `GET api/system/info` carries `wifiSignalStrengthDb` (int, the CC's own
   Wi-Fi), plus `uptime`, `cpuLoadPercentage`, `memoryLoadPercentage`,
   `pingCallTime`, `autoUpdateSoftware`, `limitPauseDuration`, `systemTime`.

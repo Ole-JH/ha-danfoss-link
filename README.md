@@ -56,6 +56,7 @@ up, and [Troubleshooting](#troubleshooting) if a step fails.
 | `sensor` vacation start / end | CC | When a planned or running vacation starts and ends; unknown when none is planned |
 | `switch` | on/off device | Link on/off outputs |
 | `sensor` unread alarms | CC | Count plus details (low battery, lost device, ...) |
+| `button` mark alarms as read | CC | Marks every unread alarm as read, as opening it in the app does |
 | `binary_sensor` living zone | room | On when the room is in the living zone. Its rooms share one Schedule/Manual mode and one schedule, so changing one changes all. |
 | `binary_sensor` battery | room | Low battery on a device in the room, from the CC's alarms. *Disabled by default.* |
 | `binary_sensor` radio connection | room | Off when the CC has lost contact with a device in the room. *Disabled by default.* |
@@ -97,10 +98,10 @@ How the integration compares with the Danfoss Link app (1.3.x).
 | Vacation temperature | ✅ | Number entity |
 | Planned vacation with dates | ✅ | `plan_vacation` / `cancel_vacation` actions |
 | On/off devices | ✅ | Switch entities |
-| Alarms (low battery, lost device, ...) | ✅ | Unread alarms sensor, battery and radio connection binary sensors |
+| Alarms (low battery, lost device, ...) | ✅ | A notification per unread alarm, unread alarms sensor, battery and radio connection binary sensors |
+| Mark alarms as read | ✅ | Dismiss the notification, or press the Mark alarms as read button |
 | CC Wi-Fi signal | ✅ | Diagnostic sensor |
 | Pair a new app with a CC code | ✅ | Config flow (cloud pairing codes only) |
-| Mark alarms as read | ❌ | Not yet |
 | Weekly schedules (rooms, living zone) | ❌ | Not yet; the CC's API supports it |
 | Schedules for on/off devices | ❌ | Not yet |
 | Pause with an end time | ❌ | Pause can only be switched on and off |

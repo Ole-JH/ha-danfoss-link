@@ -10,6 +10,8 @@ from pathlib import Path
 import shutil
 from unittest.mock import PropertyMock, patch
 
+from homeassistant.components import persistent_notification
+from homeassistant.components.button import DOMAIN as BUTTON_DOMAIN, SERVICE_PRESS
 from homeassistant.components.climate import (
     ATTR_HVAC_ACTION,
     ATTR_HVAC_MODE,
@@ -420,6 +422,115 @@ async def test_switch_and_numbers(hass: HomeAssistant, fake: FakeMDG) -> None:
     await hass.async_block_till_done()
     assert hass.states.get("switch.my_home_towel_rail").state == "on"
     assert hass.states.get("number.living_room_away_temperature").state == "16.5"
+
+
+def _alarm_notifications(hass: HomeAssistant) -> dict[str, dict]:
+    return {
+        key: value
+        for key, value in persistent_notification._async_get_or_create_notifications(hass).items()
+        if key.startswith("danfoss_link_")
+    }
+
+
+def _alarm_writes(fake: FakeMDG) -> list:
+    return [r for r in fake.requests if r[0] == "PATCH" and r[1].startswith("/api/alarms/")]
+
+
+async def _refresh(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+
+
+async def test_alarm_notification(hass: HomeAssistant, fake: FakeMDG) -> None:
+    entry = await _setup(hass)
+    notifications = _alarm_notifications(hass)
+    assert list(notifications) == [f"danfoss_link_{entry.entry_id}_alarm_3"]
+    notification = notifications[f"danfoss_link_{entry.entry_id}_alarm_3"]
+    assert notification["title"] == "My home: Low battery level"
+    assert "Room: Bathroom" in notification["message"]
+    assert "Device: 7" in notification["message"]
+
+    # A new alarm shows up; the same one is not repeated.
+    fake.state["/api/alarms"].append(
+        {"id": 4, "level": "Error", "room": "0", "isRead": False,
+         "titleTextId": "IDS_UA1_ALERTVIEWER_NODE_DEAD_ALERT"}
+    )  # fmt: skip
+    await _refresh(hass, entry)
+    notifications = _alarm_notifications(hass)
+    assert len(notifications) == 2
+    assert "Room: Living room" in notifications[f"danfoss_link_{entry.entry_id}_alarm_4"]["message"]
+
+    # Read in the app: the notification goes away without writing to the CC.
+    fake.state["/api/alarms"][0]["isRead"] = True
+    await _refresh(hass, entry)
+    assert list(_alarm_notifications(hass)) == [f"danfoss_link_{entry.entry_id}_alarm_4"]
+    assert not _alarm_writes(fake)
+
+    # Marked unread in the app: it comes back.
+    fake.state["/api/alarms"][0]["isRead"] = False
+    await _refresh(hass, entry)
+    assert len(_alarm_notifications(hass)) == 2
+
+    await hass.config_entries.async_unload(entry.entry_id)
+    assert not _alarm_notifications(hass)
+    assert not _alarm_writes(fake)
+
+
+async def test_alarm_notification_danish(hass: HomeAssistant, fake: FakeMDG) -> None:
+    hass.config.language = "da"
+    entry = await _setup(hass)
+    notification = _alarm_notifications(hass)[f"danfoss_link_{entry.entry_id}_alarm_3"]
+    assert notification["title"] == "My home: Lavt batteriniveau"
+    assert "Rum: Bathroom" in notification["message"]
+
+
+async def test_dismissing_notification_marks_alarm_read(hass: HomeAssistant, fake: FakeMDG) -> None:
+    entry = await _setup(hass)
+    persistent_notification.async_dismiss(hass, f"danfoss_link_{entry.entry_id}_alarm_3")
+    await hass.async_block_till_done()
+    assert _alarm_writes(fake) == [("PATCH", "/api/alarms/3", {"isRead": True, "id": 3})]
+    assert fake.state["/api/alarms"][0]["isRead"] is True
+    assert hass.states.get("sensor.my_home_unread_alarms").state == "0"
+    assert not _alarm_notifications(hass)
+
+
+async def test_dismiss_all_notifications_marks_alarms_read(
+    hass: HomeAssistant, fake: FakeMDG
+) -> None:
+    await _setup(hass)
+    persistent_notification.async_create(hass, "Not ours", "Other", "other")
+    persistent_notification.async_dismiss_all(hass)
+    await hass.async_block_till_done()
+    assert _alarm_writes(fake) == [("PATCH", "/api/alarms/3", {"isRead": True, "id": 3})]
+
+
+async def test_failed_mark_read_shows_alarm_again(hass: HomeAssistant, fake: FakeMDG) -> None:
+    entry = await _setup(hass)
+    fake.reject_writes = True
+    persistent_notification.async_dismiss(hass, f"danfoss_link_{entry.entry_id}_alarm_3")
+    await hass.async_block_till_done()
+    assert not _alarm_notifications(hass)
+    await _refresh(hass, entry)
+    assert len(_alarm_notifications(hass)) == 1
+
+
+async def test_mark_alarms_read_button(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    await hass.services.async_call(
+        BUTTON_DOMAIN, SERVICE_PRESS, {ATTR_ENTITY_ID: "button.my_home_mark_alarms_as_read"},
+        blocking=True,
+    )  # fmt: skip
+    await hass.async_block_till_done()
+    assert _alarm_writes(fake) == [("PATCH", "/api/alarms/3", {"isRead": True, "id": 3})]
+    assert hass.states.get("sensor.my_home_unread_alarms").state == "0"
+    assert not _alarm_notifications(hass)
+
+    # Nothing unread: nothing to send.
+    await hass.services.async_call(
+        BUTTON_DOMAIN, SERVICE_PRESS, {ATTR_ENTITY_ID: "button.my_home_mark_alarms_as_read"},
+        blocking=True,
+    )  # fmt: skip
+    assert len(_alarm_writes(fake)) == 1
 
 
 def _vacation_writes(fake: FakeMDG) -> list:

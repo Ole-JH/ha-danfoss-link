@@ -155,6 +155,11 @@
       "radio": {
         "name": "Radio connection"
       }
+    },
+    "button": {
+      "mark_alarms_read": {
+        "name": "Mark alarms as read"
+      }
     }
   },
   "services": {

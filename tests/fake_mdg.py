@@ -443,6 +443,12 @@ class FakeMDG:
                 if device["id"] == content["id"]:
                     device.update(content)
             return 200, None
+        if method == "PATCH" and uri.startswith("/api/alarms/"):
+            for alarm in self.state["/api/alarms"]:
+                if uri == f"/api/alarms/{alarm['id']}" and content.get("id") == alarm["id"]:
+                    alarm["isRead"] = content["isRead"]
+                    return 200, alarm
+            return 404, {"errorMessages": ["Not found"]}
         if method == "PATCH" and uri == "/api/settings/temperature":
             self.state[uri].update(content)
             return 200, None
