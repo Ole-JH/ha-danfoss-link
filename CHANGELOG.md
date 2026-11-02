@@ -4,15 +4,6 @@ Each release's GitHub release notes are taken from its section below. Add a
 `## <version>` section matching the version in `manifest.json` before the
 release PR to `main` is merged.
 
-## Unreleased
-
-### New
-- **Pause heating** now or later: the `danfoss_link.pause` action pauses for a duration (e.g. 2 hours), until a time, or until you resume, as the app's Pause does, and can plan a pause to start later (Home Assistant keeps the plan and starts the pause then, as the CC cannot plan one itself). `danfoss_link.cancel_pause` ends or cancels it. Every room holds the pause temperature meanwhile. New **Pause start** / **Pause end** sensors, and the house mode select shows pause and vacation state, times and temperatures as attributes.
-- **Pause & vacation card** for dashboards (`custom:danfoss-link-away-card`), included with the integration: pause for 1, 2, 4 or 8 hours with one tap or until you resume, plan a pause or a vacation, see what is planned and how long is left, change or cancel it. Pause or vacation can be hidden in the card settings.
-
-### Fixes
-- Pause and vacation times follow the CC's own clock. Danfoss controllers can run minutes fast (one ran 18 minutes ahead), which made a timed pause end early and vacation times show off by as much.
-
 ## 0.4.0
 
 ### New
@@ -21,10 +12,14 @@ release PR to `main` is merged.
 
   ![Schedule card](https://raw.githubusercontent.com/Ole-JH/ha-danfoss-link/v0.4.0/docs/images/schedule-card.png)
 
+- **Pause heating** now or later: the `danfoss_link.pause` action pauses for a duration (e.g. 2 hours), until a time, or until you resume, as the app's Pause does, and can plan a pause to start later (Home Assistant keeps the plan and starts the pause then, as the CC cannot plan one itself). `danfoss_link.cancel_pause` ends or cancels it. Every room holds the pause temperature meanwhile. New **Pause start** / **Pause end** sensors, and the house mode select shows pause and vacation state, times and temperatures as attributes.
+- **Pause & vacation card** for dashboards (`custom:danfoss-link-away-card`), included with the integration: pause for 1, 2, 4 or 8 hours with one tap or until you resume, plan a pause or a vacation, see what is planned and how long is left, change or cancel it. Pause or vacation can be hidden in the card settings.
+
 ### Fixes
 - A room you switch to Manual and then back to Schedule while the house is *At home* now gets its at-home temperature again. Before, the Danfoss controller quietly left that room out of *At home*, so it heated to its away temperature even though the house said At home.
 - The House state sensor shows **Manual** instead of *unknown* when the CC reports a manual house state.
 - On/off devices (e.g. floor-heating relays) show as unavailable while the CC reports "no response from unit" for them, instead of looking like they switched when nothing happened.
+- Pause and vacation times follow the CC's own clock. Danfoss controllers can run minutes fast (one ran 18 minutes ahead), which made a timed pause end early and vacation times show off by as much.
 
 ### Improvements
 - Each thermostat shows its weekly schedule: the `schedule_today` attribute lists today's *at home* periods (e.g. `06:00-08:00`, `16:00-22:30`) and `schedule` lists them for every weekday. The rest of the day is the away (setback) temperature.
