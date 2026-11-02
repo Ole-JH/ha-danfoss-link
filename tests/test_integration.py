@@ -954,3 +954,16 @@ async def test_set_schedule_invalid_period(hass: HomeAssistant, fake: FakeMDG) -
         )
     assert err.value.translation_key == "invalid_period"
     assert _schedule_writes(fake) == []
+
+
+async def test_schedule_card_registered(hass: HomeAssistant) -> None:
+    from unittest.mock import AsyncMock, MagicMock  # noqa: PLC0415
+
+    from custom_components.danfoss_link.frontend import CARD_URL, async_register_card  # noqa: PLC0415
+
+    hass.http = MagicMock(async_register_static_paths=AsyncMock())
+    with patch("homeassistant.components.frontend.add_extra_js_url") as add_js:
+        await async_register_card(hass)
+    (paths,) = hass.http.async_register_static_paths.call_args.args
+    assert paths[0].url_path == CARD_URL
+    assert add_js.call_args.args[1].startswith(f"{CARD_URL}?v=")

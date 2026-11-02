@@ -1,6 +1,10 @@
 {
   "domain": "danfoss_link",
   "name": "Danfoss Link",
+  "after_dependencies": [
+    "frontend",
+    "http"
+  ],
   "codeowners": [
     "@Ole-JH"
   ],

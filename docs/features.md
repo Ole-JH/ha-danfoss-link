@@ -55,6 +55,22 @@ data:
   at_home: ["05:30-08:00", "17:00-22:30"]
 ```
 
+### Schedule card
+
+The integration also brings a dashboard card for the schedule; nothing extra
+to install. Edit a dashboard, add a card and pick **Danfoss Link schedule**
+(or use `type: custom:danfoss-link-schedule-card` with `entity:` set to a
+thermostat). Drag over the grid to paint *at home* or *away*; drag down to
+change several days at once. **Save** sends the changed days with the
+`set_schedule` action.
+
+![Schedule card](images/schedule-card.png)
+
+```yaml
+type: custom:danfoss-link-schedule-card
+entity: climate.bedroom
+```
+
 Diagnostic entities marked *disabled by default* can be turned on under the
 device's entity list in Home Assistant.
 

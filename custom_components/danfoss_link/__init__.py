@@ -20,6 +20,7 @@ from .const import (
 )
 from .coordinator import DanfossLinkConfigEntry, DanfossLinkCoordinator
 from .entity import controller_device_info
+from .frontend import async_register_card
 from .services import async_setup_services
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -36,8 +37,9 @@ PLATFORMS: list[Platform] = [
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the integration's actions."""
+    """Register the integration's actions and the schedule card."""
     async_setup_services(hass)
+    await async_register_card(hass)
     return True
 
 
