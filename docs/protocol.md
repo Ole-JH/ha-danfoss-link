@@ -358,6 +358,9 @@ PUT api/modes/vacation <- {"type": "Vacation", "state": "Inactive"}   (cancel / 
   (enum `Active`) and optional `endTime` (`yyyy-MM-ddTHH:mm:ss`). So the CC
   cannot plan a pause; the integration keeps a planned pause in Home
   Assistant and sends the PUT at the start time.
+  Tested live the same evening: a pause planned in Home Assistant for
+  22:11-22:14 started at 22:11 (CC `startTime` 22:11:18 after the drift
+  correction) and the CC ended it by itself at 22:14, back to the schedule.
 
   The app's pause dialog ("Pause Heating?") has a `pause.activate_1hour_button`
   ("1 Hour") next to the plain Pause; ending it is "End pause mode and switch
