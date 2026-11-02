@@ -4,11 +4,6 @@ Each release's GitHub release notes are taken from its section below. Add a
 `## <version>` section matching the version in `manifest.json` before the
 release PR to `main` is merged.
 
-## Unreleased
-
-### Improvements
-- Each thermostat shows its weekly schedule: the `schedule_today` attribute lists today's *at home* periods (e.g. `06:00-08:00`, `16:00-22:30`) and `schedule` lists them for every weekday. The rest of the day is the away (setback) temperature.
-
 ## 0.3.2
 
 ### Fixes
@@ -17,6 +12,7 @@ release PR to `main` is merged.
 - On/off devices (e.g. floor-heating relays) show as unavailable while the CC reports "no response from unit" for them, instead of looking like they switched when nothing happened.
 
 ### Improvements
+- Each thermostat shows its weekly schedule: the `schedule_today` attribute lists today's *at home* periods (e.g. `06:00-08:00`, `16:00-22:30`) and `schedule` lists them for every weekday. The rest of the day is the away (setback) temperature.
 - The House mode select has a new `at_home_rooms` attribute listing the rooms the current *At home* period covers.
 - Danish names for the House state values.
 

@@ -71,24 +71,46 @@ ROOMS = [
         "hasTemperatureSensor": True,
         "schedule": {
             day: [
-                {"startTimeFromMidnight": "00:00:00", "endTimeFromMidnight": "06:00:00",
-                 "state": "Away"},
-                {"startTimeFromMidnight": "06:00:00", "endTimeFromMidnight": "08:00:00",
-                 "state": "AtHome"},
-                {"startTimeFromMidnight": "08:00:00", "endTimeFromMidnight": "16:00:00",
-                 "state": "Away"},
-                {"startTimeFromMidnight": "16:00:00", "endTimeFromMidnight": "22:30:00",
-                 "state": "AtHome"},
-                {"startTimeFromMidnight": "22:30:00", "endTimeFromMidnight": "1.00:00:00",
-                 "state": "Away"},
+                {
+                    "startTimeFromMidnight": "00:00:00",
+                    "endTimeFromMidnight": "06:00:00",
+                    "state": "Away",
+                },
+                {
+                    "startTimeFromMidnight": "06:00:00",
+                    "endTimeFromMidnight": "08:00:00",
+                    "state": "AtHome",
+                },
+                {
+                    "startTimeFromMidnight": "08:00:00",
+                    "endTimeFromMidnight": "16:00:00",
+                    "state": "Away",
+                },
+                {
+                    "startTimeFromMidnight": "16:00:00",
+                    "endTimeFromMidnight": "22:30:00",
+                    "state": "AtHome",
+                },
+                {
+                    "startTimeFromMidnight": "22:30:00",
+                    "endTimeFromMidnight": "1.00:00:00",
+                    "state": "Away",
+                },
             ]
             for day in ("monday", "tuesday", "wednesday", "thursday", "friday")
-        } | {
+        }
+        | {
             day: [
-                {"startTimeFromMidnight": "00:00:00", "endTimeFromMidnight": "07:30:00",
-                 "state": "Away"},
-                {"startTimeFromMidnight": "07:30:00", "endTimeFromMidnight": "1.00:00:00",
-                 "state": "AtHome"},
+                {
+                    "startTimeFromMidnight": "00:00:00",
+                    "endTimeFromMidnight": "07:30:00",
+                    "state": "Away",
+                },
+                {
+                    "startTimeFromMidnight": "07:30:00",
+                    "endTimeFromMidnight": "1.00:00:00",
+                    "state": "AtHome",
+                },
             ]
             for day in ("saturday", "sunday")
         },
@@ -429,8 +451,7 @@ class FakeMDG:
             # Like a real CC: the room list leaves out schedules, the room itself has it.
             if uri == "/api/rooms":
                 return 200, [
-                    {k: v for k, v in room.items() if k != "schedule"}
-                    for room in self.state[uri]
+                    {k: v for k, v in room.items() if k != "schedule"} for room in self.state[uri]
                 ]
             if uri.startswith("/api/rooms/"):
                 room_id = uri.removeprefix("/api/rooms/")
