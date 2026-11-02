@@ -109,11 +109,18 @@ class DanfossLinkRoomClimate(DanfossLinkRoomEntity, ClimateEntity):
         week = {name: day for name in days}
         if self.room.get("zone") == ZONE_LIVING:
             # Living-zone rooms share one schedule, set on the zone as the app does.
+            rooms = [
+                room_id
+                for room_id, room in self.coordinator.data.rooms.items()
+                if room.get("zone") == ZONE_LIVING
+            ]
             await self.coordinator.async_write_schedule(
-                "/api/zones/living", {"name": ZONE_LIVING}, week
+                "/api/zones/living", {"name": ZONE_LIVING}, week, rooms
             )
         else:
-            await self.coordinator.async_write_schedule(self.room_uri, {"id": self.room_id}, week)
+            await self.coordinator.async_write_schedule(
+                self.room_uri, {"id": self.room_id}, week, [self.room_id]
+            )
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         await self.async_set_regulation_type(_HVAC_TO_REGULATION[hvac_mode])

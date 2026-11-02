@@ -902,10 +902,13 @@ async def test_set_schedule_room(hass: HomeAssistant, fake: FakeMDG) -> None:
         {"startTimeFromMidnight": "16:00:00", "endTimeFromMidnight": "22:30:00", "state": "AtHome"},
         {"startTimeFromMidnight": "22:30:00", "endTimeFromMidnight": "1.00:00:00", "state": "Away"},
     ]
-    # One PATCH per day, in week order, like the app's "copy to days".
+    # All days in one PATCH: each round trip through the relay is slow.
     assert _schedule_writes(fake) == [
-        ("PATCH", "/api/rooms/1", {"id": 1, "schedule": {"monday": day}}),
-        ("PATCH", "/api/rooms/1", {"id": 1, "schedule": {"tuesday": day}}),
+        ("PATCH", "/api/rooms/1", {"id": 1, "schedule": {"monday": day, "tuesday": day}}),
+    ]
+    # Shown without reading the rooms again.
+    assert [r for r in fake.requests if r[:2] == ("GET", "/api/rooms/1")] == [
+        ("GET", "/api/rooms/1", None)  # only the one at setup
     ]
     # Read back right away, not after the hourly schedule refresh.
     week = hass.states.get("climate.bathroom").attributes["schedule"]
@@ -967,3 +970,32 @@ async def test_schedule_card_registered(hass: HomeAssistant) -> None:
     (paths,) = hass.http.async_register_static_paths.call_args.args
     assert paths[0].url_path == CARD_URL
     assert add_js.call_args.args[1].startswith(f"{CARD_URL}?v=")
+
+
+async def test_set_schedule_falls_back_to_one_day_per_patch(
+    hass: HomeAssistant, fake: FakeMDG
+) -> None:
+    await _setup(hass)
+    original = fake._handle
+
+    def handle(method, uri, content):
+        if method == "PATCH" and len((content or {}).get("schedule", {})) > 1:
+            fake.requests.append((method, uri, content))
+            return 400, {"errorMessages": ["JSON content does not conform to JSON Schema."]}
+        return original(method, uri, content)
+
+    fake._handle = handle
+    await hass.services.async_call(
+        DOMAIN,
+        "set_schedule",
+        {"days": ["monday", "sunday"], "at_home": ["06:00-08:00"]},
+        target={ATTR_ENTITY_ID: "climate.living_room"},
+        blocking=True,
+    )
+    assert [list(r[2]["schedule"]) for r in _schedule_writes(fake)] == [
+        ["monday", "sunday"],
+        ["monday"],
+        ["sunday"],
+    ]
+    week = hass.states.get("climate.living_room").attributes["schedule"]
+    assert week["monday"] == week["sunday"] == ["06:00-08:00"]

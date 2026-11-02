@@ -170,13 +170,43 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
                 rooms[room_id]["schedule"] = schedule
 
     async def async_write_schedule(
-        self, uri: str, base: dict[str, Any], days: dict[str, list[dict[str, str]]]
+        self,
+        uri: str,
+        base: dict[str, Any],
+        days: dict[str, list[dict[str, str]]],
+        room_ids: list[int],
     ) -> None:
-        """Send weekly schedule days, one PATCH per day as the app does, then refresh."""
-        for day, periods in days.items():
-            await self._send("PATCH", uri, {**base, "schedule": {day: periods}})
-        self._schedules_fetched = None
-        await self.async_refresh()
+        """Send weekly schedule days and show them on these rooms right away.
+
+        Every round trip through the relay is slow, so all days go in one
+        PATCH. Should the CC refuse that, fall back to one PATCH per day,
+        as the app's "copy to days" does.
+        """
+        content = {**base, "schedule": days}
+        _LOGGER.debug("PATCH %s %s", uri, content)
+        try:
+            await self._call(self.client.request, "PATCH", uri, content)
+        except RequestError as err:
+            if len(days) == 1:
+                raise HomeAssistantError(
+                    f"The Danfoss Link CC rejected the change (HTTP {err.status}): {err.content}"
+                ) from err
+            _LOGGER.debug("CC refused several days at once (%s), sending one per day", err)
+            for day, periods in days.items():
+                await self._send("PATCH", uri, {**base, "schedule": {day: periods}})
+        except CannotConnect as err:
+            raise HomeAssistantError(f"Cannot reach the Danfoss Link CC: {err}") from err
+        except DanfossLinkError as err:
+            raise HomeAssistantError(str(err)) from err
+        # The CC took it: update the known schedules instead of reading every
+        # room again (the hourly schedule refresh picks up anything else).
+        for room_id in room_ids:
+            schedule = dict(self._schedules.get(room_id, {}))
+            schedule.update(days)
+            self._schedules[room_id] = schedule
+            if room_id in self.data.rooms:
+                self.data.rooms[room_id]["schedule"] = schedule
+        self.async_set_updated_data(self.data)
 
     async def async_write(self, method: str, uri: str, content: dict[str, Any]) -> None:
         """Send a change to the CC, then refresh."""

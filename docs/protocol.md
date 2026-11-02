@@ -283,9 +283,12 @@ PATCH api/zones/living <- {"name": ..., "schedule": {...}}   (living zone)
   weekday when `systemTime` carries an offset, otherwise HA's time zone.
 - The `danfoss_link.set_schedule` action writes days the same way: the
   given AtHome periods (whole quarters, merged when they overlap) with Away
-  in the gaps, one PATCH per weekday; living-zone rooms go to
-  `api/zones/living`. The schedule is read back right after. Not yet tried
-  on a real CC.
+  in the gaps; living-zone rooms go to `api/zones/living`. Confirmed live
+  2026-11-02 for a single room and for the living zone (one PATCH per day).
+  Each relay round trip is slow, so the integration now sends all chosen
+  days in one PATCH (`{"schedule": {"monday": [...], "tuesday": [...]}}`)
+  and falls back to one PATCH per day if the CC refuses it. It then updates
+  its cached schedules from what it sent instead of reading every room again.
 - The system-wide schedule (`schedule` / `normalSchedule` in
   `api/system/status`) is a flat period list for today, read-only in the app.
 - On/off devices have their own schedule via `PatchOnOffDeviceRequest`
