@@ -270,6 +270,11 @@ PATCH api/zones/living <- {"name": ..., "schedule": {...}}   (living zone)
   `api/rooms/{id}`. Sending `regulation.type` to `api/rooms/{id}` for a
   living-zone room fails (seen on Ole's CC): HTTP 400 "Can't change
   regulation type of rooms that are part of the Living Zone".
+- The integration shows a room's schedule read-only as climate attributes:
+  `schedule` maps each weekday to its non-Away periods as `"HH:MM-HH:MM"`
+  (`"1.00:00:00"` shown as `24:00`; states other than AtHome get a suffix,
+  e.g. `asleep`), and `schedule_today` is today's list. "Today" is the CC's
+  weekday when `systemTime` carries an offset, otherwise HA's time zone.
 - The system-wide schedule (`schedule` / `normalSchedule` in
   `api/system/status`) is a flat period list for today, read-only in the app.
 - On/off devices have their own schedule via `PatchOnOffDeviceRequest`

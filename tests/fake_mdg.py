@@ -69,6 +69,29 @@ ROOMS = [
         "state": "Normal",
         "zone": "Living",
         "hasTemperatureSensor": True,
+        "schedule": {
+            day: [
+                {"startTimeFromMidnight": "00:00:00", "endTimeFromMidnight": "06:00:00",
+                 "state": "Away"},
+                {"startTimeFromMidnight": "06:00:00", "endTimeFromMidnight": "08:00:00",
+                 "state": "AtHome"},
+                {"startTimeFromMidnight": "08:00:00", "endTimeFromMidnight": "16:00:00",
+                 "state": "Away"},
+                {"startTimeFromMidnight": "16:00:00", "endTimeFromMidnight": "22:30:00",
+                 "state": "AtHome"},
+                {"startTimeFromMidnight": "22:30:00", "endTimeFromMidnight": "1.00:00:00",
+                 "state": "Away"},
+            ]
+            for day in ("monday", "tuesday", "wednesday", "thursday", "friday")
+        } | {
+            day: [
+                {"startTimeFromMidnight": "00:00:00", "endTimeFromMidnight": "07:30:00",
+                 "state": "Away"},
+                {"startTimeFromMidnight": "07:30:00", "endTimeFromMidnight": "1.00:00:00",
+                 "state": "AtHome"},
+            ]
+            for day in ("saturday", "sunday")
+        },
     },
     {
         "id": 1,

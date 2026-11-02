@@ -224,6 +224,12 @@ async def test_setup_creates_entities(hass: HomeAssistant, fake: FakeMDG) -> Non
     bathroom = hass.states.get("climate.bathroom")
     assert bathroom.state == HVACMode.HEAT
     assert bathroom.attributes[ATTR_HVAC_ACTION] == HVACAction.IDLE
+    # Weekly schedule: the at home periods; away (setback) fills the rest.
+    week = living.attributes["schedule"]
+    assert week["monday"] == ["06:00-08:00", "16:00-22:30"]
+    assert week["sunday"] == ["07:30-24:00"]
+    assert living.attributes["schedule_today"] in (week["monday"], week["sunday"])
+    assert "schedule" not in bathroom.attributes
 
     assert hass.states.get("sensor.living_room_temperature").state == "20.6"
     alarms = hass.states.get("sensor.my_home_unread_alarms")

@@ -17,6 +17,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .const import REGULATION_MANUAL, REGULATION_SCHEDULE
 from .coordinator import DanfossLinkConfigEntry, DanfossLinkCoordinator
 from .entity import DanfossLinkRoomEntity
+from .schedule import schedule_attributes
 
 PARALLEL_UPDATES = 1
 
@@ -89,6 +90,7 @@ class DanfossLinkRoomClimate(DanfossLinkRoomEntity, ClimateEntity):
             "away_setpoint": regulation.get("awaySetpoint"),
             "manual_setpoint": regulation.get("manualSetpoint"),
             "zone": room.get("zone"),
+            **schedule_attributes(room, self.coordinator.data.info),
         }
 
     async def async_set_temperature(self, **kwargs: Any) -> None:

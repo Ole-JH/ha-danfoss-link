@@ -102,7 +102,7 @@ How the integration compares with the Danfoss Link app (1.3.x).
 | Mark alarms as read | ✅ | Dismiss the notification, or press the Mark alarms as read button. Notifications can be turned off in the integration's options |
 | CC Wi-Fi signal | ⚠️ | Diagnostic sensor, only on CCs that report it (not firmware 4.2.1797) |
 | Pair a new app with a CC code | ✅ | Config flow (cloud pairing codes only) |
-| Weekly schedules (rooms, living zone) | ❌ | Not yet; the CC's API supports it |
+| Weekly schedules (rooms, living zone) | ⚠️ | Shown, not editable yet: the thermostat's `schedule_today` and `schedule` attributes list the at-home periods (the rest of the day is away) |
 | Schedules for on/off devices | ❌ | Not yet |
 | Pause with an end time | ❌ | Pause can only be switched on and off |
 | Outdoor temperature | ❌ | Not yet |
@@ -262,7 +262,7 @@ serial number.
 - **Tested on one setup so far.** It is confirmed on a real Link CC, but the message
   formats come from reverse engineering and other device mixes may behave differently.
   Please open an issue with debug logs if anything doesn't work with your CC.
-- Schedules can't be edited from Home Assistant yet (the API supports it).
+- Schedules can be seen (thermostat attributes) but not edited from Home Assistant yet (the API supports it).
 
 ## Alternatives
 
