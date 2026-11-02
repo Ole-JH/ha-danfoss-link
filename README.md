@@ -65,7 +65,7 @@ modes behave are in [docs/features.md](docs/features.md).
 
 ## Documentation
 
-- [Entities and features](docs/features.md): every entity, planned vacations, feature
+- [Entities and features](docs/features.md): every entity, planned vacations, weekly schedules, feature
   coverage compared with the app, and what to expect after setup.
 - [Troubleshooting](docs/troubleshooting.md): error messages, debug logging and
   diagnostics.

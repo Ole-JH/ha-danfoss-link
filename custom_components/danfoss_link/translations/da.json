@@ -197,6 +197,20 @@
           "description": "Hvilken CC. Kan udelades, hvis du kun har én."
         }
       }
+    },
+    "set_schedule": {
+      "name": "Sæt ugeprogram",
+      "description": "Erstatter ugeprogrammet på de valgte dage: hjemme i de angivne perioder, ude (natsænkning) resten af døgnet. Et rum i Living Zone ændrer programmet for alle rum i zonen.",
+      "fields": {
+        "days": {
+          "name": "Dage",
+          "description": "De ugedage, der skal ændres. De andre dage beholdes."
+        },
+        "at_home": {
+          "name": "Hjemme-perioder",
+          "description": "Perioder som TT:MM-TT:MM i kvarterer, f.eks. 06:00-08:00. Brug 24:00 for midnat sidst på dagen. Lad feltet være tomt for ude hele dagen."
+        }
+      }
     }
   },
   "exceptions": {
@@ -211,6 +225,22 @@
     },
     "not_loaded": {
       "message": "Danfoss Link CC'en er ikke indlæst."
+    },
+    "invalid_period": {
+      "message": "\"{period}\" er ikke en gyldig periode. Brug TT:MM-TT:MM i kvarterer, f.eks. 06:00-08:00."
+    }
+  },
+  "selector": {
+    "weekday": {
+      "options": {
+        "monday": "Mandag",
+        "tuesday": "Tirsdag",
+        "wednesday": "Onsdag",
+        "thursday": "Torsdag",
+        "friday": "Fredag",
+        "saturday": "Lørdag",
+        "sunday": "Søndag"
+      }
     }
   }
 }

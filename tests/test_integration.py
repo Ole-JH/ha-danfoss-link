@@ -880,3 +880,77 @@ def test_english_translation_matches_strings() -> None:
     strings = json.loads((base / "strings.json").read_text())
     assert json.loads((base / "translations" / "en.json").read_text()) == strings
     assert strings["entity"]["binary_sensor"]["living_zone"]["state"] == {"off": "No", "on": "Yes"}
+
+
+def _schedule_writes(fake: FakeMDG) -> list[tuple[str, str, dict]]:
+    return [r for r in fake.requests if r[0] == "PATCH" and "schedule" in (r[2] or {})]
+
+
+async def test_set_schedule_room(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    await hass.services.async_call(
+        DOMAIN,
+        "set_schedule",
+        {"days": ["tuesday", "monday"], "at_home": ["06:00-08:00", "16:00-22:30"]},
+        target={ATTR_ENTITY_ID: "climate.bathroom"},
+        blocking=True,
+    )
+    day = [
+        {"startTimeFromMidnight": "00:00:00", "endTimeFromMidnight": "06:00:00", "state": "Away"},
+        {"startTimeFromMidnight": "06:00:00", "endTimeFromMidnight": "08:00:00", "state": "AtHome"},
+        {"startTimeFromMidnight": "08:00:00", "endTimeFromMidnight": "16:00:00", "state": "Away"},
+        {"startTimeFromMidnight": "16:00:00", "endTimeFromMidnight": "22:30:00", "state": "AtHome"},
+        {"startTimeFromMidnight": "22:30:00", "endTimeFromMidnight": "1.00:00:00", "state": "Away"},
+    ]
+    # One PATCH per day, in week order, like the app's "copy to days".
+    assert _schedule_writes(fake) == [
+        ("PATCH", "/api/rooms/1", {"id": 1, "schedule": {"monday": day}}),
+        ("PATCH", "/api/rooms/1", {"id": 1, "schedule": {"tuesday": day}}),
+    ]
+    # Read back right away, not after the hourly schedule refresh.
+    week = hass.states.get("climate.bathroom").attributes["schedule"]
+    assert week["monday"] == week["tuesday"] == ["06:00-08:00", "16:00-22:30"]
+
+
+async def test_set_schedule_living_zone(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    await hass.services.async_call(
+        DOMAIN,
+        "set_schedule",
+        {"days": "saturday"},
+        target={ATTR_ENTITY_ID: "climate.living_room"},
+        blocking=True,
+    )
+    assert _schedule_writes(fake) == [
+        (
+            "PATCH",
+            "/api/zones/living",
+            {
+                "name": "Living",
+                "schedule": {
+                    "saturday": [
+                        {
+                            "startTimeFromMidnight": "00:00:00",
+                            "endTimeFromMidnight": "1.00:00:00",
+                            "state": "Away",
+                        }
+                    ]
+                },
+            },
+        )
+    ]
+    assert hass.states.get("climate.living_room").attributes["schedule"]["saturday"] == []
+
+
+async def test_set_schedule_invalid_period(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            "set_schedule",
+            {"days": ["monday"], "at_home": ["06:10-08:00"]},
+            target={ATTR_ENTITY_ID: "climate.bathroom"},
+            blocking=True,
+        )
+    assert err.value.translation_key == "invalid_period"
+    assert _schedule_writes(fake) == []

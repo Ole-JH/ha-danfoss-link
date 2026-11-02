@@ -281,6 +281,11 @@ PATCH api/zones/living <- {"name": ..., "schedule": {...}}   (living zone)
   (`"1.00:00:00"` shown as `24:00`; states other than AtHome get a suffix,
   e.g. `asleep`), and `schedule_today` is today's list. "Today" is the CC's
   weekday when `systemTime` carries an offset, otherwise HA's time zone.
+- The `danfoss_link.set_schedule` action writes days the same way: the
+  given AtHome periods (whole quarters, merged when they overlap) with Away
+  in the gaps, one PATCH per weekday; living-zone rooms go to
+  `api/zones/living`. The schedule is read back right after. Not yet tried
+  on a real CC.
 - The system-wide schedule (`schedule` / `normalSchedule` in
   `api/system/status`) is a flat period list for today, read-only in the app.
 - On/off devices have their own schedule via `PatchOnOffDeviceRequest`

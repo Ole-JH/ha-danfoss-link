@@ -69,3 +69,58 @@ def schedule_attributes(room: dict[str, Any], info: dict[str, Any]) -> dict[str,
         return {}
     week = {day: day_periods(schedule.get(day)) for day in WEEKDAYS}
     return {"schedule_today": week[cc_today(info)], "schedule": week}
+
+
+# Writing: the app's editor holds the at-home periods, snaps them to 15
+# minutes and fills the gaps with Away before sending a whole day.
+_PERIOD = re.compile(r"^\s*(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s*$")
+STEP_MINUTES = 15
+DAY_MINUTES = 1440
+
+
+def parse_period(text: str) -> tuple[int, int]:
+    """ "06:00-08:30" -> (360, 510). Raises ValueError for a bad period."""
+    match = _PERIOD.match(text) if isinstance(text, str) else None
+    if not match:
+        raise ValueError(text)
+    h1, m1, h2, m2 = (int(part) for part in match.groups())
+    start, end = h1 * 60 + m1, h2 * 60 + m2
+    if m1 >= 60 or m2 >= 60 or not 0 <= start < end <= DAY_MINUTES:
+        raise ValueError(text)
+    if start % STEP_MINUTES or end % STEP_MINUTES:
+        raise ValueError(text)
+    return start, end
+
+
+def _timespan(minutes: int) -> str:
+    if minutes == DAY_MINUTES:
+        return "1.00:00:00"
+    return f"{_clock(minutes)}:00"
+
+
+def build_day(at_home: list[tuple[int, int]]) -> list[dict[str, str]]:
+    """A full 00:00-24:00 day: the at-home periods (merged), Away in between."""
+    merged: list[list[int]] = []
+    for start, end in sorted(at_home):
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    day: list[dict[str, str]] = []
+    cursor = 0
+    for start, end in merged:
+        if start > cursor:
+            day.append(_period_dict(cursor, start, "Away"))
+        day.append(_period_dict(start, end, "AtHome"))
+        cursor = end
+    if cursor < DAY_MINUTES:
+        day.append(_period_dict(cursor, DAY_MINUTES, "Away"))
+    return day
+
+
+def _period_dict(start: int, end: int, state: str) -> dict[str, str]:
+    return {
+        "startTimeFromMidnight": _timespan(start),
+        "endTimeFromMidnight": _timespan(end),
+        "state": state,
+    }

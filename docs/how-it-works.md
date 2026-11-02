@@ -48,7 +48,6 @@ alongside it.
 - **Tested on one setup so far.** It is confirmed on a real Link CC, but the message
   formats come from reverse engineering and other device mixes may behave differently.
   Please open an issue with debug logs if anything doesn't work with your CC.
-- Schedules can be seen (thermostat attributes) but not edited from Home Assistant yet (the API supports it).
 
 ## Alternatives
 

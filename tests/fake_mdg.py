@@ -485,6 +485,8 @@ class FakeMDG:
             for room in self.state["/api/rooms"]:
                 if room.get("zone") == "Living" and "regulationType" in content:
                     room["regulation"]["type"] = content["regulationType"]
+                if room.get("zone") == "Living" and "schedule" in content:
+                    room.setdefault("schedule", {}).update(content["schedule"])
             if content.get("regulationType") == "Manual":
                 self._drop_from_at_home(
                     [r["id"] for r in self.state["/api/rooms"] if r.get("zone") == "Living"]

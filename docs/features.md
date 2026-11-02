@@ -33,6 +33,28 @@ data:
   end: "2026-12-27 16:00:00"
 ```
 
+## Weekly schedule
+
+Each thermostat shows its schedule in the `schedule_today` and `schedule`
+attributes: the *at home* periods per weekday. The rest of the day is away,
+i.e. the room's away (setback) temperature.
+
+Change it with the **Danfoss Link: Set schedule** action
+(`danfoss_link.set_schedule`). It replaces the chosen days with the given at
+home periods (`HH:MM-HH:MM` in 15-minute steps, `24:00` for the end of the
+day) and fills the rest with away, like the app's schedule editor. Leave
+`at_home` empty for away all day. Rooms in the living zone share one schedule,
+so changing one of them changes them all.
+
+```yaml
+action: danfoss_link.set_schedule
+target:
+  entity_id: climate.bedroom
+data:
+  days: [monday, tuesday, wednesday, thursday, friday]
+  at_home: ["05:30-08:00", "17:00-22:30"]
+```
+
 Diagnostic entities marked *disabled by default* can be turned on under the
 device's entity list in Home Assistant.
 
@@ -58,7 +80,7 @@ How the integration compares with the Danfoss Link app (1.3.x).
 | Mark alarms as read | ✅ | Dismiss the notification, or press the Mark alarms as read button. Notifications can be turned off in the integration's options |
 | CC Wi-Fi signal | ⚠️ | Diagnostic sensor, only on CCs that report it (not firmware 4.2.1797) |
 | Pair a new app with a CC code | ✅ | Config flow (cloud pairing codes only) |
-| Weekly schedules (rooms, living zone) | ⚠️ | Shown, not editable yet: the thermostat's `schedule_today` and `schedule` attributes list the at-home periods (the rest of the day is away) |
+| Weekly schedules (rooms, living zone) | ✅ | Shown as thermostat attributes, changed with the `set_schedule` action |
 | Schedules for on/off devices | ❌ | Not yet |
 | Pause with an end time | ❌ | Pause can only be switched on and off |
 | Outdoor temperature | ❌ | Not yet |

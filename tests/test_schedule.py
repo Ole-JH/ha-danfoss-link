@@ -2,7 +2,15 @@
 
 from datetime import UTC, datetime
 
-from custom_components.danfoss_link.schedule import cc_today, day_periods, schedule_attributes
+import pytest
+
+from custom_components.danfoss_link.schedule import (
+    build_day,
+    cc_today,
+    day_periods,
+    parse_period,
+    schedule_attributes,
+)
 
 
 def _period(start: str, end: str, state: str) -> dict:
@@ -32,3 +40,26 @@ def test_cc_today_uses_cc_offset() -> None:
 def test_schedule_attributes_empty_without_schedule() -> None:
     assert schedule_attributes({}, {}) == {}
     assert schedule_attributes({"schedule": {}}, {}) == {}
+
+
+def test_parse_period() -> None:
+    assert parse_period("06:00-08:30") == (360, 510)
+    assert parse_period(" 22:00 - 24:00 ") == (1320, 1440)
+    for bad in ("06:00", "08:00-06:00", "06:10-08:00", "06:00-24:15", "25:00-26:00", "6-8"):
+        with pytest.raises(ValueError):
+            parse_period(bad)
+
+
+def test_build_day_fills_away_and_merges() -> None:
+    day = build_day([(960, 1350), (360, 480), (450, 600)])
+    assert [(p["startTimeFromMidnight"], p["endTimeFromMidnight"], p["state"]) for p in day] == [
+        ("00:00:00", "06:00:00", "Away"),
+        ("06:00:00", "10:00:00", "AtHome"),
+        ("10:00:00", "16:00:00", "Away"),
+        ("16:00:00", "22:30:00", "AtHome"),
+        ("22:30:00", "1.00:00:00", "Away"),
+    ]
+    assert build_day([]) == [
+        {"startTimeFromMidnight": "00:00:00", "endTimeFromMidnight": "1.00:00:00", "state": "Away"}
+    ]
+    assert day_periods(build_day([(0, 1440)])) == ["00:00-24:00"]

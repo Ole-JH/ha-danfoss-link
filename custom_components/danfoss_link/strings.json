@@ -197,6 +197,20 @@
           "description": "Which CC. Can be left out if you have only one."
         }
       }
+    },
+    "set_schedule": {
+      "name": "Set schedule",
+      "description": "Replaces the weekly schedule on the chosen days: at home in the given periods, away (setback) the rest of the day. A room in the living zone changes the schedule of every room in the zone.",
+      "fields": {
+        "days": {
+          "name": "Days",
+          "description": "The weekdays to change. The other days are kept."
+        },
+        "at_home": {
+          "name": "At home periods",
+          "description": "Periods as HH:MM-HH:MM in 15-minute steps, e.g. 06:00-08:00. Use 24:00 for midnight at the end of the day. Leave empty for away all day."
+        }
+      }
     }
   },
   "exceptions": {
@@ -211,6 +225,22 @@
     },
     "not_loaded": {
       "message": "The Danfoss Link CC is not loaded."
+    },
+    "invalid_period": {
+      "message": "\"{period}\" is not a valid period. Use HH:MM-HH:MM in 15-minute steps, e.g. 06:00-08:00."
+    }
+  },
+  "selector": {
+    "weekday": {
+      "options": {
+        "monday": "Monday",
+        "tuesday": "Tuesday",
+        "wednesday": "Wednesday",
+        "thursday": "Thursday",
+        "friday": "Friday",
+        "saturday": "Saturday",
+        "sunday": "Sunday"
+      }
     }
   }
 }

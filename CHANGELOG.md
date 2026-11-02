@@ -4,6 +4,11 @@ Each release's GitHub release notes are taken from its section below. Add a
 `## <version>` section matching the version in `manifest.json` before the
 release PR to `main` is merged.
 
+## Unreleased
+
+### New
+- **Set schedule** action (`danfoss_link.set_schedule`): change a room's weekly schedule from Home Assistant. Give the weekdays and the *at home* periods (e.g. `06:00-08:00`, `16:00-22:30`); the rest of the day is away (setback). A room in the living zone changes the whole zone's schedule.
+
 ## 0.3.2
 
 ### Fixes

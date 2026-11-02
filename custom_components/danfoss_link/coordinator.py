@@ -169,6 +169,15 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
             if room_id in rooms and not isinstance(rooms[room_id].get("schedule"), dict):
                 rooms[room_id]["schedule"] = schedule
 
+    async def async_write_schedule(
+        self, uri: str, base: dict[str, Any], days: dict[str, list[dict[str, str]]]
+    ) -> None:
+        """Send weekly schedule days, one PATCH per day as the app does, then refresh."""
+        for day, periods in days.items():
+            await self._send("PATCH", uri, {**base, "schedule": {day: periods}})
+        self._schedules_fetched = None
+        await self.async_refresh()
+
     async def async_write(self, method: str, uri: str, content: dict[str, Any]) -> None:
         """Send a change to the CC, then refresh."""
         await self.async_send(method, uri, content)
