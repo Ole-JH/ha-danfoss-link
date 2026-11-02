@@ -17,7 +17,6 @@ from .const import (
     MODE_ENDPOINTS,
     MODE_INACTIVE,
     MODE_PAUSE,
-    MODE_PLANNED,
     MODE_VACATION,
     REGULATION_MANUAL,
     REGULATION_SCHEDULE,
@@ -50,16 +49,6 @@ async def async_setup_entry(
     if any(mode.get("type") in _OPTIONS for mode in coordinator.data.modes):
         entities.append(DanfossLinkHouseMode(coordinator))
     async_add_entities(entities)
-
-
-def mode_state(mode: dict[str, Any]) -> str | None:
-    """ "active", "planned" or None for a mode from api/modes."""
-    state = mode.get("state")
-    if state == MODE_PLANNED:
-        return "planned"
-    if state == MODE_ACTIVE:
-        return "active"
-    return None
 
 
 class DanfossLinkHouseMode(DanfossLinkEntity, SelectEntity):
@@ -111,12 +100,9 @@ class DanfossLinkHouseMode(DanfossLinkEntity, SelectEntity):
         # For the pause and vacation card: each mode's state (active, planned
         # or None), start and end, and the temperature the rooms then hold.
         for mode_type, key in ((MODE_PAUSE, "pause"), (MODE_VACATION, "vacation")):
-            mode = next((m for m in data.modes if m.get("type") == mode_type), None)
-            if mode is None:
+            if not any(m.get("type") == mode_type for m in data.modes):
                 continue
-            state = mode_state(mode)
-            start_time = data.parse_time(mode, "startTime") if state else None
-            end_time = data.parse_time(mode, "endTime") if state else None
+            state, start_time, end_time = self.coordinator.mode_info(mode_type)
             attrs[f"{key}_state"] = state
             attrs[f"{key}_start"] = start_time.isoformat() if start_time else None
             attrs[f"{key}_end"] = end_time.isoformat() if end_time else None
@@ -135,43 +121,32 @@ class DanfossLinkHouseMode(DanfossLinkEntity, SelectEntity):
     async def async_pause(self, start: datetime | None, end: datetime | None) -> None:
         """Pause heating from ``start`` (None: now) until ``end`` (None: until resumed).
 
-        Pausing again while paused moves the end time. A pause with a start
-        time is planned, like a vacation: the CC starts it by itself.
+        Pausing again while paused moves the end time. The CC cannot plan a
+        pause, so a later start is kept and started by Home Assistant; it
+        replaces an earlier plan.
         """
         self._require_pause()
-        data = self.coordinator.data
-        content: dict[str, Any] = {"type": MODE_PAUSE, "state": MODE_ACTIVE}
         if start is not None:
-            content["startTime"] = data.format_time(start)
-        if end is not None:
-            content["endTime"] = data.format_time(end)
-        if start is not None:
-            # Planned: leave the current mode alone until the pause starts.
-            await self.coordinator.async_write(
-                "PUT", f"/api/modes/{MODE_ENDPOINTS[MODE_PAUSE]}", content
-            )
+            await self.coordinator.planned_pause.async_plan(start, end)
             return
-        await self._async_switch(MODE_PAUSE, content, resend=True)
+        await self.coordinator.planned_pause.async_cancel()
+        await self.coordinator.async_start_pause(end)
 
     async def async_cancel_pause(self) -> None:
-        """End a running pause or cancel a planned one."""
+        """End a running pause and cancel a planned one."""
         self._require_pause()
-        await self.coordinator.async_write(
-            "PUT",
-            f"/api/modes/{MODE_ENDPOINTS[MODE_PAUSE]}",
-            {"type": MODE_PAUSE, "state": MODE_INACTIVE},
-        )
+        await self.coordinator.planned_pause.async_cancel()
+        if self._active_type() == MODE_PAUSE:
+            await self.coordinator.async_write(
+                "PUT",
+                f"/api/modes/{MODE_ENDPOINTS[MODE_PAUSE]}",
+                {"type": MODE_PAUSE, "state": MODE_INACTIVE},
+            )
 
-    async def _async_switch(
-        self,
-        target: str | None,
-        content: dict[str, Any] | None = None,
-        *,
-        resend: bool = False,
-    ) -> None:
+    async def _async_switch(self, target: str | None) -> None:
         current = self._active_type()
         all_rooms = sorted(self.coordinator.data.rooms)
-        if current == target and not resend:
+        if current == target:
             at_home = self.coordinator.active_at_home()
             if (
                 target == MODE_AT_HOME
@@ -184,8 +159,7 @@ class DanfossLinkHouseMode(DanfossLinkEntity, SelectEntity):
             return
         # AtHome is an override too ("home now"); only switching to another
         # mode replaces it, going back to the schedule has to end it.
-        # Pausing again while paused just moves the end time.
-        if current not in (None, target) and (current != MODE_AT_HOME or target is None):
+        if current is not None and (current != MODE_AT_HOME or target is None):
             await self.coordinator.async_write(
                 "PUT",
                 f"/api/modes/{MODE_ENDPOINTS[current]}",
@@ -198,9 +172,7 @@ class DanfossLinkHouseMode(DanfossLinkEntity, SelectEntity):
             await self.coordinator.async_refresh()
             return
         await self.coordinator.async_write(
-            "PUT",
-            f"/api/modes/{MODE_ENDPOINTS[target]}",
-            content or {"type": target, "state": MODE_ACTIVE},
+            "PUT", f"/api/modes/{MODE_ENDPOINTS[target]}", {"type": target, "state": MODE_ACTIVE}
         )
 
 

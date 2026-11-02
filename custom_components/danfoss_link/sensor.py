@@ -21,7 +21,6 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .const import MODE_PAUSE, MODE_VACATION
 from .coordinator import DanfossLinkConfigEntry, DanfossLinkCoordinator
 from .entity import DanfossLinkEntity, DanfossLinkRoomEntity
-from .select import mode_state
 
 PARALLEL_UPDATES = 0
 
@@ -164,8 +163,5 @@ class DanfossLinkModeTime(DanfossLinkEntity, SensorEntity):
 
     @property
     def native_value(self) -> datetime | None:
-        data = self.coordinator.data
-        for mode in data.modes:
-            if mode.get("type") == self._mode_type and mode_state(mode):
-                return data.parse_time(mode, self._key)
-        return None
+        _, start, end = self.coordinator.mode_info(self._mode_type)
+        return start if self._key == "startTime" else end

@@ -493,6 +493,9 @@ class FakeMDG:
                     [r["id"] for r in self.state["/api/rooms"] if r.get("zone") == "Living"]
                 )
             return 200, None
+        if method == "PUT" and uri == "/api/modes/pause" and "startTime" in content:
+            # The real CC's schema for Pause allows only type, state and endTime.
+            return 400, {"errorMessages": ["JSON content does not conform to JSON Schema."]}
         if method == "PUT" and uri.startswith("/api/modes/"):
             for mode in self.state["/api/modes"]:
                 if mode["type"] == content["type"]:
@@ -501,7 +504,7 @@ class FakeMDG:
                     mode.update(content)
                     # Like the app's demo CC: a vacation with a start is planned.
                     if (
-                        mode["type"] in ("Vacation", "Pause")
+                        mode["type"] == "Vacation"
                         and "startTime" in content
                         and mode["state"] == "Active"
                     ):

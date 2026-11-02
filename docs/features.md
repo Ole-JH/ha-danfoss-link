@@ -87,7 +87,10 @@ weekly schedule again. A pause replaces *At home* and *Vacation*.
 - **House mode → Pause** pauses until you pick another house mode.
 - The `danfoss_link.pause` action targets the house mode select. Give a
   `duration` or an `end`, or neither to pause until resumed, and a `start`
-  to plan the pause for later (the CC starts it by itself). Pausing again
+  to plan the pause for later. The CC itself cannot plan a pause, so Home
+  Assistant keeps the plan (also across restarts) and starts the pause on
+  the CC at that time; if Home Assistant is down then, it starts the pause as
+  soon as it is back, unless the pause would already have ended. Pausing again
   while paused moves the end. `danfoss_link.cancel_pause` ends a running
   pause or cancels a planned one.
 - The house mode select has `pause_state` (`active`, `planned` or none),

@@ -220,7 +220,7 @@
     },
     "pause": {
       "name": "Sæt varmen på pause",
-      "description": "Sætter varmen på pause på CC'en: alle rum, også dem på Manuel, holder pausetemperaturen indtil sluttidspunktet, eller til du vælger en anden tilstand for huset. Angiv en start for at planlægge pausen til senere; CC'en starter den selv. Angiv en varighed eller et sluttidspunkt, eller ingen af dem for at holde pause, indtil du genoptager. Pauser du igen under en pause, flyttes sluttidspunktet.",
+      "description": "Sætter varmen på pause på CC'en: alle rum, også dem på Manuel, holder pausetemperaturen indtil sluttidspunktet, eller til du vælger en anden tilstand for huset. Angiv en start for at planlægge pausen til senere; Home Assistant starter den på det tidspunkt. Angiv en varighed eller et sluttidspunkt, eller ingen af dem for at holde pause, indtil du genoptager. Pauser du igen under en pause, flyttes sluttidspunktet.",
       "fields": {
         "start": {
           "name": "Start",

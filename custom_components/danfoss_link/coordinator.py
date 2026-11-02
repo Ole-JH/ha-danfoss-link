@@ -16,7 +16,16 @@ from homeassistant.util import dt as dt_util
 
 from .api import CannotConnect, DanfossLinkClient, DanfossLinkError, RequestError
 from .cc_time import clock_drift, format_cc_time, parse_cc_time
-from .const import DOMAIN, MODE_ACTIVE, MODE_AT_HOME, MODE_ENDPOINTS, MODE_INACTIVE
+from .const import (
+    DOMAIN,
+    MODE_ACTIVE,
+    MODE_AT_HOME,
+    MODE_ENDPOINTS,
+    MODE_INACTIVE,
+    MODE_PAUSE,
+    MODE_PLANNED,
+)
+from .planned_pause import PlannedPause
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,6 +46,16 @@ OPTIONAL_ENDPOINTS = {
     "alarms": "/api/alarms",
     "temperature_settings": "/api/settings/temperature",
 }
+
+
+def mode_state(mode: dict[str, Any]) -> str | None:
+    """ "active", "planned" or None for a mode from api/modes."""
+    state = mode.get("state")
+    if state == MODE_PLANNED:
+        return "planned"
+    if state == MODE_ACTIVE:
+        return "active"
+    return None
 
 
 @dataclass
@@ -94,6 +113,10 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
         # room id -> weekly schedule from api/rooms/{id}, and when it was read.
         self._schedules: dict[int, dict[str, Any]] = {}
         self._schedules_fetched: datetime | None = None
+        # The CC cannot plan a pause, so Home Assistant does.
+        self.planned_pause = PlannedPause(
+            hass, entry.entry_id, self.async_start_pause, self.async_update_listeners
+        )
 
     async def _call(self, func: Any, *args: Any) -> Any:
         async with self._lock:
@@ -256,6 +279,39 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
             {"type": MODE_AT_HOME, "state": MODE_ACTIVE, "rooms": sorted(rooms)},
         )
 
+    def mode_info(self, mode_type: str) -> tuple[str | None, datetime | None, datetime | None]:
+        """("active" / "planned" / None, start, end) of a vacation or pause."""
+        data = self.data
+        for mode in data.modes:
+            if mode.get("type") == mode_type and (state := mode_state(mode)):
+                return state, data.parse_time(mode, "startTime"), data.parse_time(mode, "endTime")
+        if mode_type == MODE_PAUSE and self.planned_pause.start is not None:
+            return "planned", self.planned_pause.start, self.planned_pause.end
+        return None, None, None
+
+    async def async_start_pause(self, end: datetime | None) -> None:
+        """Pause heating now, until ``end`` (None: until resumed).
+
+        The CC ends AtHome by itself when a pause starts; another temporary
+        mode (vacation, boost) is ended first, as the house mode select does.
+        """
+        for mode in self.data.modes:
+            mode_type = mode.get("type")
+            if (
+                mode.get("state") == MODE_ACTIVE
+                and mode_type in MODE_ENDPOINTS
+                and mode_type not in (MODE_AT_HOME, MODE_PAUSE)
+            ):
+                await self._send(
+                    "PUT",
+                    f"/api/modes/{MODE_ENDPOINTS[mode_type]}",
+                    {"type": mode_type, "state": MODE_INACTIVE},
+                )
+        content: dict[str, Any] = {"type": MODE_PAUSE, "state": MODE_ACTIVE}
+        if end is not None:
+            content["endTime"] = self.data.format_time(end)
+        await self.async_write("PUT", f"/api/modes/{MODE_ENDPOINTS[MODE_PAUSE]}", content)
+
     async def async_mark_alarms_read(self, alarm_ids: list[int]) -> None:
         """Mark alarms as read, as the app does when one is opened."""
         for alarm_id in alarm_ids:
@@ -280,4 +336,5 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
             raise HomeAssistantError(str(err)) from err
 
     async def async_close(self) -> None:
+        self.planned_pause.async_stop()
         await self._call(self.client.close)

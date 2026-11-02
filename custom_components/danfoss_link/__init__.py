@@ -6,6 +6,7 @@ from homeassistant.const import CONF_SCAN_INTERVAL, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
 from .alarms import AlarmNotifier
@@ -21,6 +22,7 @@ from .const import (
 from .coordinator import DanfossLinkConfigEntry, DanfossLinkCoordinator
 from .entity import controller_device_info
 from .frontend import async_register_card
+from .planned_pause import STORAGE_VERSION
 from .services import async_setup_services
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -68,6 +70,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DanfossLinkConfigEntry) 
         raise
 
     entry.runtime_data = coordinator
+    await coordinator.planned_pause.async_load()
     # Register the CC first so the room devices can name it as their parent.
     coordinator.controller_device_id = (
         dr.async_get(hass)
@@ -93,3 +96,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: DanfossLinkConfigEntry)
     if unloaded:
         await entry.runtime_data.async_close()
     return unloaded
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: DanfossLinkConfigEntry) -> None:
+    """Forget a pause planned on a CC that is removed."""
+    await Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.planned_pause").async_remove()

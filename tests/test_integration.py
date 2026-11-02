@@ -36,7 +36,7 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 import voluptuous as vol
 
 from custom_components.danfoss_link import coordinator as coordinator_module
@@ -863,43 +863,91 @@ async def test_planned_pause(hass: HomeAssistant, fake: FakeMDG, freezer) -> Non
     await _setup(hass)
     house = "select.my_home_house_mode"
     await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: house, "option": "vacation"},
+        blocking=True,
+    )  # fmt: skip
+    fake.requests.clear()
+    await hass.services.async_call(
         DOMAIN,
         "pause",
         {"start": "2030-07-01T18:00:00+00:00", "duration": {"hours": 3}},
         target={ATTR_ENTITY_ID: house},
         blocking=True,
     )
-    assert _mode_writes(fake) == [
-        (
-            "PUT",
-            "/api/modes/pause",
-            {
-                "type": "Pause",
-                "state": "Active",
-                "startTime": "2030-07-01T18:00:00Z",
-                "endTime": "2030-07-01T21:00:00Z",
-            },
-        )
-    ]
+    # The CC cannot plan a pause: Home Assistant keeps it until the start.
+    assert _mode_writes(fake) == []
     await hass.async_block_till_done()
     state = hass.states.get(house)
-    # Planned: the house keeps following its schedule until then.
-    assert state.state == "schedule"
+    assert state.state == "vacation"
     assert state.attributes["pause_state"] == "planned"
     assert state.attributes["pause_start"] == "2030-07-01T18:00:00+00:00"
     assert state.attributes["pause_end"] == "2030-07-01T21:00:00+00:00"
     assert hass.states.get("sensor.my_home_pause_start").state == "2030-07-01T18:00:00+00:00"
 
-    fake.requests.clear()
+    freezer.move_to("2030-07-01T18:00:01+00:00")
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert _mode_writes(fake) == [
+        ("PUT", "/api/modes/vacation", {"type": "Vacation", "state": "Inactive"}),
+        (
+            "PUT",
+            "/api/modes/pause",
+            {"type": "Pause", "state": "Active", "endTime": "2030-07-01T21:00:00Z"},
+        ),
+    ]
+    state = hass.states.get(house)
+    assert state.state == "pause"
+    assert state.attributes["pause_state"] == "active"
+    assert state.attributes["pause_end"] == "2030-07-01T21:00:00+00:00"
+
+
+async def test_planned_pause_survives_restart(hass: HomeAssistant, fake: FakeMDG, freezer) -> None:
+    freezer.move_to("2030-07-01T12:00:00+00:00")
+    entry = await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        DOMAIN, "pause", {"start": "2030-07-01T18:00:00+00:00"}, target={ATTR_ENTITY_ID: house},
+        blocking=True,
+    )  # fmt: skip
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["pause_state"] == "planned"
+
+    # Cancelling a plan sends nothing to the CC.
     await hass.services.async_call(
         DOMAIN, "cancel_pause", {}, target={ATTR_ENTITY_ID: house}, blocking=True
     )
-    assert _mode_writes(fake) == [
-        ("PUT", "/api/modes/pause", {"type": "Pause", "state": "Inactive"})
-    ]
+    assert _mode_writes(fake) == []
     await hass.async_block_till_done()
     assert hass.states.get(house).attributes["pause_state"] is None
     assert hass.states.get("sensor.my_home_pause_start").state == "unknown"
+    freezer.move_to("2030-07-01T19:00:00+00:00")
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert _mode_writes(fake) == []
+
+
+async def test_planned_pause_retries_when_unreachable(
+    hass: HomeAssistant, fake: FakeMDG, freezer
+) -> None:
+    freezer.move_to("2030-07-01T12:00:00+00:00")
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        DOMAIN, "pause", {"start": "2030-07-01T12:10:00+00:00"}, target={ATTR_ENTITY_ID: house},
+        blocking=True,
+    )  # fmt: skip
+    fake.reject_writes = True
+    freezer.move_to("2030-07-01T12:10:01+00:00")
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["pause_state"] == "planned"
+    fake.reject_writes = False
+    freezer.move_to("2030-07-01T12:11:05+00:00")
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert hass.states.get(house).state == "pause"
+    assert hass.states.get(house).attributes["pause_end"] is None
 
 
 async def test_pause_start_in_past_pauses_now(hass: HomeAssistant, fake: FakeMDG) -> None:

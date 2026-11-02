@@ -220,7 +220,7 @@
     },
     "pause": {
       "name": "Pause heating",
-      "description": "Pauses heating on the CC: every room, Manual ones too, holds the pause temperature until the end time or until you choose another house mode. Give a start to plan the pause for later; the CC starts it by itself. Give a duration or an end, or neither to pause until resumed. Pausing again while paused moves the end time.",
+      "description": "Pauses heating on the CC: every room, Manual ones too, holds the pause temperature until the end time or until you choose another house mode. Give a start to plan the pause for later; Home Assistant starts it then. Give a duration or an end, or neither to pause until resumed. Pausing again while paused moves the end time.",
       "fields": {
         "start": {
           "name": "Start",

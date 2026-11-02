@@ -341,13 +341,23 @@ PUT api/modes/vacation <- {"type": "Vacation", "state": "Inactive"}   (cancel / 
   with a `Z` suffix and read from `startTimeUtc` / `endTimeUtc`; if it ends in
   an offset (`+02:00`), they are CC local time sent without a suffix and read
   from `startTime` / `endTime`. Values outside 1970-2099 mean "no date".
-- Pause takes an optional `endTime` the same way (`S.k.m()`):
+- Pause takes an optional `endTime` the same way (`S.k.m()`), but no start:
 
   ```
   PUT api/modes/pause <- {"type": "Pause", "state": "Active"}                 (until resumed)
   PUT api/modes/pause <- {"type": "Pause", "state": "Active", "endTime": T}   (until T)
   PUT api/modes/pause <- {"type": "Pause", "state": "Inactive"}               (resume)
   ```
+
+  Live on Ole's CC (2026-11-02, firmware 4.2.1724): the timed pause was
+  accepted and read back as `{"type": "Pause", "state": "Active",
+  "startTime": <CC now>, "endTime": T}`, and the CC ended it by itself at T
+  (on its own clock, see below). A `startTime` in the PUT is refused with
+  HTTP 400; the CC's JSON schema for this request (sent with the error) is
+  `additionalProperties: false` with only `type` (enum `Pause`), `state`
+  (enum `Active`) and optional `endTime` (`yyyy-MM-ddTHH:mm:ss`). So the CC
+  cannot plan a pause; the integration keeps a planned pause in Home
+  Assistant and sends the PUT at the start time.
 
   The app's pause dialog ("Pause Heating?") has a `pause.activate_1hour_button`
   ("1 Hour") next to the plain Pause; ending it is "End pause mode and switch
@@ -357,11 +367,19 @@ PUT api/modes/vacation <- {"type": "Vacation", "state": "Inactive"}   (cancel / 
   the strings, the code was not decompiled). The rooms hold
   `api/settings/temperature` `pauseTemperature.setpoint` (min 4, max 10,
   6 on Ole's CC); the app only reads it.
+- **Mode times are on the CC's clock.** Ole's CC ran 18 minutes fast
+  (`systemTime` 22:11 at 21:53 real time), so a pause sent with
+  `endTime` 22:12 ended at 21:54 real time, after 2 instead of 20 minutes.
+  The integration takes the difference between `systemTime` and Home
+  Assistant's clock on every poll (whole minutes; ignored when more than an
+  hour, which would be a wrong clock rather than drift) and adds it to every
+  time it sends and subtracts it from every time it shows.
 
 The integration exposes this as the `danfoss_link.plan_vacation` and
 `danfoss_link.cancel_vacation` actions plus Vacation start/end sensors, and
-pause as the `danfoss_link.pause` action (duration or end time), a Pause end
-sensor and the bundled pause card.
+pause as the `danfoss_link.pause` / `cancel_pause` actions (duration or end
+time, optional start kept by Home Assistant), Pause start/end sensors and the
+bundled pause & vacation card.
 
 Live test on Ole's CC (2026-11-02, firmware 4.2.1724, integration 0.3.1), via
 Home Assistant, every change put back afterwards:
