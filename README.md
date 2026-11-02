@@ -54,7 +54,7 @@ up, and [Troubleshooting](#troubleshooting) if a step fails.
 | `sensor` house state | CC | What the CC is doing now: at home / away / asleep from the schedule, or the active mode |
 | `number` vacation temperature | CC | Temperature used in vacation mode |
 | `sensor` vacation start / end | CC | When a planned or running vacation starts and ends; unknown when none is planned |
-| `switch` | on/off device | Link on/off outputs |
+| `switch` | on/off device | Link on/off outputs; unavailable while the CC reports "no response from unit" for them |
 | `sensor` unread alarms | CC | Count plus details (low battery, lost device, ...) |
 | `button` mark alarms as read | CC | Marks every unread alarm as read, as opening it in the app does |
 | `binary_sensor` living zone | room | On when the room is in the living zone. Its rooms share one Schedule/Manual mode and one schedule, so changing one changes all. |

@@ -129,6 +129,18 @@
       "alarms": {
         "name": "Ulæste alarmer"
       },
+      "house_state": {
+        "name": "Husets status",
+        "state": {
+          "at_home": "Hjemme",
+          "away": "Ude",
+          "asleep": "Sover",
+          "vacation": "Ferie",
+          "pause": "Pause",
+          "boost": "Boost",
+          "manual": "Manuel"
+        }
+      },
       "wifi_signal": {
         "name": "Wi-Fi-signal"
       },

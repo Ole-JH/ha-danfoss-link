@@ -508,6 +508,22 @@ async def test_house_state_manual(hass: HomeAssistant, fake: FakeMDG) -> None:
     assert hass.states.get("sensor.my_home_house_state").state == "manual"
 
 
+async def test_switch_unavailable_while_node_dead(hass: HomeAssistant, fake: FakeMDG) -> None:
+    fake.state["/api/alarms"].append(
+        {"id": 9, "level": "Warning", "node": "FT-016|Towel rail", "isRead": True,
+         "titleTextId": "IDS_UA1_ALERTVIEWER_NODE_DEAD_ALERT",
+         "createdDate": "2026-05-21T03:21:16"}
+    )  # fmt: skip
+    entry = await _setup(hass)
+    assert hass.states.get("switch.my_home_towel_rail").state == "unavailable"
+
+    # The CC removes the alarm when the unit answers again.
+    fake.state["/api/alarms"].pop()
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get("switch.my_home_towel_rail").state == "off"
+
+
 async def test_switch_and_numbers(hass: HomeAssistant, fake: FakeMDG) -> None:
     await _setup(hass)
     await hass.services.async_call(
