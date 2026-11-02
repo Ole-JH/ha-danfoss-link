@@ -10,6 +10,8 @@ release PR to `main` is merged.
 - **Set schedule** action (`danfoss_link.set_schedule`): change a room's weekly schedule from Home Assistant. Give the weekdays and the *at home* periods (e.g. `06:00-08:00`, `16:00-22:30`); the rest of the day is away (setback). A room in the living zone changes the whole zone's schedule.
 - **Schedule card** for dashboards (`custom:danfoss-link-schedule-card`), included with the integration: see each room's week at a glance with its times, one tab per room (the living zone shares one), and drag to change at home and away periods.
 
+  ![Schedule card](https://raw.githubusercontent.com/Ole-JH/ha-danfoss-link/v0.4.0/docs/images/schedule-card.png)
+
 ### Fixes
 - A room you switch to Manual and then back to Schedule while the house is *At home* now gets its at-home temperature again. Before, the Danfoss controller quietly left that room out of *At home*, so it heated to its away temperature even though the house said At home.
 - The House state sensor shows **Manual** instead of *unknown* when the CC reports a manual house state.
