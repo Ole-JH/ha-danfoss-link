@@ -48,20 +48,68 @@ instead.
 
 ## What you get
 
-Each room on the CC becomes a device with:
+Each room on the CC becomes its own device (linked to the CC device), so you can put
+it in an area.
 
-- a **thermostat** (`climate`) with current and target temperature. **Auto** means the
-  room follows the CC's schedule, **Heat** means it holds the temperature you set;
-- a room temperature sensor, a Schedule/Manual select, and the at-home and away
-  temperatures.
+| Entity | Per | What it does |
+|---|---|---|
+| `climate` | room | Current and target temperature. **Auto** = Schedule, **Heat** = Manual (see [Modes](docs/features.md#modes)). Shows whether the room is heating. |
+| `sensor` temperature | room | Room temperature for history/statistics |
+| `select` mode | room | **Schedule** / **Manual**, the same setting as the thermostat's Auto/Heat, for dashboards and automations |
+| `number` at-home / away temperature | room | The two temperatures the schedule switches between |
+| `select` house mode | CC | Schedule (no override) / At home / Vacation / Pause (/ Boost if your CC has it) |
+| `sensor` house state | CC | What the CC is doing now: at home / away / asleep from the schedule, or the active mode |
+| `number` vacation temperature | CC | Temperature used in vacation mode |
+| `sensor` vacation start / end | CC | When a planned or running vacation starts and ends; unknown when none is planned |
+| `switch` | on/off device | Link on/off outputs; unavailable while the CC reports "no response from unit" for them |
+| `sensor` unread alarms | CC | Count plus details (low battery, lost device, ...) |
+| `button` mark alarms as read | CC | Marks every unread alarm as read, as opening it in the app does |
+| `binary_sensor` living zone | room | On when the room is in the living zone. Its rooms share one Schedule/Manual mode and one schedule, so changing one changes all. |
+| `binary_sensor` battery | room | Low battery on a device in the room, from the CC's alarms. *Disabled by default.* |
+| `binary_sensor` radio connection | room | Off when the CC has lost contact with a device in the room. *Disabled by default.* |
+| `sensor` Wi-Fi signal | CC | The CC's Wi-Fi signal strength. *Disabled by default.* Only created if the CC reports it; firmware 4.2.1797 does not. |
 
-The CC itself gets the house mode (at home, vacation, pause), vacation temperature and
-planned vacation dates, alarms, and switches for Link on/off plugs. Home Assistant
-reads the CC every 60 seconds and sends changes right away. Your phone app keeps
-working alongside it.
+Entities marked *disabled by default* can be turned on in the device's entity list.
+Home Assistant reads the CC every 60 seconds (configurable down to 20) and sends
+changes right away. Your phone app keeps working alongside it.
 
-The full entity list, what the app can do that Home Assistant can't yet, and how the
-modes behave are in [docs/features.md](docs/features.md).
+Actions for planned vacations and weekly schedules, the feature comparison with the
+app and how the modes behave are in [docs/features.md](docs/features.md).
+
+## How it works
+
+```
+Home Assistant ──mTLS──► Danfoss MDG relay (77.66.11.x / 5.179.92.x : 443)
+               ══ end-to-end TLS tunnel ══► Link CC ──► http://127.0.0.1:8000/api/...
+```
+
+The CC has no local API: it closes all its LAN ports and only talks to the Danfoss
+cloud relay. Home Assistant pairs with the CC as its own app and goes through the same
+relay as the phone app, so the integration needs the CC and Home Assistant to be online.
+More in [docs/how-it-works.md](docs/how-it-works.md).
+
+## Known limitations
+
+- **Cloud dependent.** The relay works today, but Danfoss makes no promise it stays up.
+  If it is down, the entities become unavailable and the CC keeps heating on its own
+  schedule.
+- **Cloud pairing only.** Local-network pairing codes (starting with `0000`) are not
+  supported.
+- **Tested on one setup so far.** Message formats come from reverse engineering, so
+  other device mixes may behave differently. Please open an issue with debug logs if
+  something doesn't work with your CC.
+
+## Common problems
+
+- *No CC is waiting for this code*: the code expired or was mistyped. Start pairing on
+  the CC again and enter the new code quickly.
+- *CC offline*: the relay can't reach your CC. Check the CC's internet connection.
+- *Cannot connect*: the relay is unreachable, or another client is using the same
+  identity. If you use exported app credentials, close the Danfoss Link app. Outbound
+  TCP 443 to the relay must be allowed.
+
+Everything else, including debug logging, is in
+[docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## Documentation
 
