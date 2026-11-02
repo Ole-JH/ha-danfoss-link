@@ -232,6 +232,15 @@ content such as:
 `setpoint.temperature` changes the current period only (matches CC firmware
 4.0.36 release note); `atHomeSetpoint` changes the comfort temperature.
 
+Confirmed live on 2026-11-02 (CC firmware 4.2.1724, integration 0.3.1): a
+room in Schedule mode (`AtHome`, `atHomeSetpoint` 18) took
+`{"setpoint": {"temperature": 18.5}}`; the next poll of `api/rooms` showed
+`setpoint.temperature` 18.5, `regulation.type` still Schedule,
+`atHomeSetpoint` and `manualSetpoint` unchanged, and `regulationState`
+going from `Deadband` to `Heating` at once. Writing 18 back returned the
+room to `Deadband`. So the climate entity's setpoint is a temporary
+override in Auto and does not touch the comfort temperature.
+
 Weekly schedules (APK 1.3.5 `PatchRoomRequest`, `S.e`, `S.f`,
 `EditRoomScheduleActivity`; not yet tried live):
 
