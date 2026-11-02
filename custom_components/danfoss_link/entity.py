@@ -96,10 +96,14 @@ class DanfossLinkRoomEntity(CoordinatorEntity[DanfossLinkCoordinator]):
             )
         # Switching to Manual drops the rooms from an active "home now"
         # override, and the CC does not add them back on Schedule: do that
-        # here, so the rooms follow the house mode again.
+        # here, so the rooms follow the house mode again. Send every room, as
+        # the House mode select does: with only some rooms the CC ends the
+        # override at the next schedule period instead of keeping it.
         at_home = coordinator.active_at_home()
-        if regulation_type == REGULATION_SCHEDULE and at_home is not None:
-            covered = set(at_home.get("rooms") or [])
-            if not covered.issuperset(rooms):
-                await coordinator.async_start_at_home(sorted(covered.union(rooms)), restart=True)
+        if (
+            regulation_type == REGULATION_SCHEDULE
+            and at_home is not None
+            and not set(at_home.get("rooms") or []).issuperset(rooms)
+        ):
+            await coordinator.async_start_at_home(sorted(coordinator.data.rooms), restart=True)
         await coordinator.async_refresh()

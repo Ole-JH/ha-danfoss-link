@@ -337,7 +337,12 @@ Home Assistant, every change put back afterwards:
   mode still said AtHome. Once (rooms left: only a Manual room) the whole
   AtHome mode ended instead; not yet pinned down when the CC ends it versus
   trimming it. Ending AtHome and sending it again with every room brings
-  them all back (`endTime` back to `2099-12-31T23:59:59`). The integration
+  them all back (`endTime` back to `2099-12-31T23:59:59`). Sending only some
+  rooms (re-tested with `[0,2,5,6,7,8,9]`, the Manual bedroom left out) gives
+  `endTime` = the end of the current schedule period, so a partial override
+  ends there; with every room, Manual ones included, it is open-ended. The
+  CC also drops rooms that are already Manual from the list when another room
+  switches to Manual. The integration
   now does that when it switches rooms back to Schedule, re-selecting At home
   does it too, and the House mode select shows the covered rooms in an
   `at_home_rooms` attribute.
