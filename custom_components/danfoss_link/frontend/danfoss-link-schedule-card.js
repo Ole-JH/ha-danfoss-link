@@ -20,9 +20,11 @@ const TEXT = {
     cancel: "Cancel",
     saving: "Saving…",
     hint: "Drag over the grid to paint at home or away. Drag down to change several days.",
-    living: "Part of the living zone: saving changes the schedule of every room in the zone.",
+    living: "The living zone's rooms share this schedule:",
+    living_zone: "Living Zone",
+    title: "Schedule",
     no_schedule: "This thermostat has no schedule (yet). It is read from the CC once an hour.",
-    pick_entity: "Choose a Danfoss Link thermostat in the card settings.",
+    pick_entity: "No Danfoss Link thermostats found. Choose them in the card settings.",
     error: "Could not save",
     changed: "unsaved days",
   },
@@ -33,9 +35,11 @@ const TEXT = {
     cancel: "Fortryd",
     saving: "Gemmer…",
     hint: "Træk hen over skemaet for at male hjemme eller ude. Træk nedad for at ændre flere dage.",
-    living: "Rummet er i Living Zone: når du gemmer, ændres skemaet for alle rum i zonen.",
+    living: "Living Zone-rummene deler dette skema:",
+    living_zone: "Living Zone",
+    title: "Ugeprogram",
     no_schedule: "Termostaten har ikke noget skema (endnu). Det hentes fra CC'en én gang i timen.",
-    pick_entity: "Vælg en Danfoss Link-termostat i kortets indstillinger.",
+    pick_entity: "Ingen Danfoss Link-termostater fundet. Vælg dem i kortets indstillinger.",
     error: "Kunne ikke gemme",
     changed: "dage ikke gemt",
   },
@@ -56,6 +60,36 @@ function parseDay(periods) {
 function clock(slot) {
   const minutes = slot * 15;
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+// [start, end) slot ranges that are at home.
+function blocks(slots) {
+  const result = [];
+  let start = null;
+  for (let i = 0; i <= SLOTS; i++) {
+    const on = i < SLOTS && slots[i];
+    if (on && start === null) start = i;
+    if (!on && start !== null) {
+      result.push([start, i]);
+      start = null;
+    }
+  }
+  return result;
+}
+
+// Start and end time written in each at-home block; stacked when it is short.
+function labels(slots) {
+  return blocks(slots)
+    .map(([start, end]) => {
+      const left = (start / SLOTS) * 100;
+      const width = ((end - start) / SLOTS) * 100;
+      const wide = end - start >= 16;
+      const text = wide
+        ? `${clock(start)}–${clock(end)}`
+        : `<span>${clock(start)}</span><span>${clock(end)}</span>`;
+      return `<div class="label${wide ? "" : " stacked"}" style="left:${left}%;width:${width}%">${text}</div>`;
+    })
+    .join("");
 }
 
 function formatDay(slots) {
@@ -80,33 +114,81 @@ function makeCard() {
       return {
         schema: [
           {
-            name: "entity",
-            required: true,
-            selector: { entity: { filter: { domain: "climate", integration: "danfoss_link" } } },
+            name: "entities",
+            selector: {
+              entity: { multiple: true, filter: { domain: "climate", integration: "danfoss_link" } },
+            },
           },
           { name: "title", selector: { text: {} } },
         ],
       };
     }
 
-    static getStubConfig(hass) {
-      const entity = Object.keys(hass.states).find(
-        (id) => id.startsWith("climate.") && hass.states[id].attributes.schedule
-      );
-      return { entity: entity || "" };
+    static getStubConfig() {
+      // No entities: every Danfoss Link thermostat, one tab each.
+      return {};
     }
 
     setConfig(config) {
       this._config = config;
-      this._draft = null;
+      this._drafts = {};
       this._render();
     }
 
     set hass(hass) {
-      const old = this._hass && this._config && this._hass.states[this._config.entity];
+      const old = this._hass;
       this._hass = hass;
-      const state = this._config && hass.states[this._config.entity];
-      if (!this._root || state !== old) this._render();
+      const changed =
+        !old || this._tabs().some((tab) => tab.entities.some((id) => old.states[id] !== hass.states[id]));
+      if (!this._root || changed) this._render();
+    }
+
+    // Unsaved edits, per tab.
+    get _draft() {
+      return (this._drafts && this._drafts[this._entity]) || null;
+    }
+
+    set _draft(value) {
+      this._drafts = this._drafts || {};
+      if (value) this._drafts[this._entity] = value;
+      else delete this._drafts[this._entity];
+    }
+
+    _entityIds() {
+      const config = this._config || {};
+      if (config.entities && config.entities.length) {
+        return config.entities.map((e) => (typeof e === "string" ? e : e.entity));
+      }
+      if (config.entity) return [config.entity];
+      // Every thermostat with a Danfoss Link schedule.
+      return Object.keys((this._hass && this._hass.states) || {})
+        .filter((id) => id.startsWith("climate.") && this._hass.states[id].attributes.schedule)
+        .sort((a, b) => this._name(a).localeCompare(this._name(b)));
+    }
+
+    _name(id) {
+      const state = this._hass && this._hass.states[id];
+      return (state && state.attributes.friendly_name) || id;
+    }
+
+    // One tab per room; living-zone rooms share a schedule, so they share a tab.
+    _tabs() {
+      if (!this._config || !this._hass) return [];
+      const tabs = [];
+      let living = null;
+      for (const id of this._entityIds()) {
+        const state = this._hass.states[id];
+        if (state && state.attributes.zone === "Living") {
+          if (!living) {
+            living = { entity: id, label: this._t("living_zone"), entities: [] };
+            tabs.push(living);
+          }
+          living.entities.push(id);
+        } else {
+          tabs.push({ entity: id, label: this._name(id), entities: [id] });
+        }
+      }
+      return tabs;
     }
 
     getCardSize() {
@@ -130,7 +212,7 @@ function makeCard() {
     }
 
     _saved() {
-      const state = this._hass && this._hass.states[this._config.entity];
+      const state = this._hass && this._hass.states[this._entity];
       const schedule = state && state.attributes.schedule;
       if (!schedule) return null;
       return Object.fromEntries(DAYS.map((d) => [d, parseDay(schedule[d])]));
@@ -154,15 +236,31 @@ function makeCard() {
       if (!this._root) {
         this._root = this.attachShadow({ mode: "open" });
       }
-      const state = this._hass.states[this._config.entity];
+      const tabs = this._tabs();
+      let tab = tabs.find((t) => t.entity === this._entity);
+      if (!tab) tab = tabs[0];
+      this._entity = tab && tab.entity;
+      const state = this._entity && this._hass.states[this._entity];
       const week = state && this._week();
       const attrs = (state && state.attributes) || {};
-      const title = this._config.title || attrs.friendly_name || this._config.entity || "";
+      const title =
+        this._config.title || (tabs.length === 1 ? tab.label : this._t("title"));
+      const tabBar =
+        tabs.length > 1
+          ? `<div class="tabs">${tabs
+              .map(
+                (t) =>
+                  `<button class="tab${t === tab ? " selected" : ""}${this._drafts[t.entity] ? " dirty" : ""}" data-entity="${t.entity}">${t.label}</button>`
+              )
+              .join("")}</div>`
+          : "";
       const unit = (this._hass.config && this._hass.config.unit_system && this._hass.config.unit_system.temperature) || "°C";
-      const temp = (v) => (v === undefined || v === null ? "" : ` ${v} ${unit}`);
+      // Living-zone rooms have their own temperatures, so leave them out there.
+      const temp = (v) =>
+        v === undefined || v === null || (tab && tab.entities.length > 1) ? "" : ` ${v} ${unit}`;
 
       let body;
-      if (!this._config.entity || !state) {
+      if (!state) {
         body = `<div class="note">${this._t("pick_entity")}</div>`;
       } else if (!week) {
         body = `<div class="note">${this._t("no_schedule")}</div>`;
@@ -180,7 +278,7 @@ function makeCard() {
           const periods = formatDay(week[day]).join(", ") || "–";
           return `
             <div class="day${changed.includes(day) ? " changed" : ""}">${this._weekdayName(day)}</div>
-            <div class="track" title="${periods}">${cells}${marker}</div>`;
+            <div class="track" title="${periods}">${cells}<div class="labels" data-day="${day}">${labels(week[day])}</div>${marker}</div>`;
         }).join("");
         const ticks = [0, 3, 6, 9, 12, 15, 18, 21, 24]
           .map((h) => `<span style="left:${(h / 24) * 100}%">${String(h).padStart(2, "0")}</span>`)
@@ -194,7 +292,11 @@ function makeCard() {
             <div></div><div class="ticks">${ticks}</div>
             ${rows}
           </div>
-          ${attrs.zone === "Living" ? `<div class="note">${this._t("living")}</div>` : ""}
+          ${
+            attrs.zone === "Living"
+              ? `<div class="note">${this._t("living")} ${tab.entities.map((id) => this._name(id)).join(", ")}.</div>`
+              : ""
+          }
           ${
             changed.length
               ? `<div class="actions">
@@ -211,9 +313,17 @@ function makeCard() {
         <style>${STYLE}</style>
         <ha-card>
           <div class="header">${title}</div>
+          ${tabBar}
           <div class="content">${body}</div>
         </ha-card>`;
 
+      for (const button of this._root.querySelectorAll(".tab")) {
+        button.addEventListener("click", () => {
+          this._entity = button.dataset.entity;
+          this._error = null;
+          this._render();
+        });
+      }
       const grid = this._root.querySelector(".grid");
       if (grid) grid.addEventListener("pointerdown", (ev) => this._start(ev));
       const save = this._root.querySelector(".save");
@@ -273,6 +383,9 @@ function makeCard() {
       for (const cell of this._root.querySelectorAll(".cell")) {
         cell.classList.toggle("on", draft[cell.dataset.day][+cell.dataset.slot]);
       }
+      for (const box of this._root.querySelectorAll(".labels")) {
+        box.innerHTML = labels(draft[box.dataset.day]);
+      }
     }
 
     async _save() {
@@ -292,7 +405,7 @@ function makeCard() {
       try {
         for (const data of groups.values()) {
           await this._hass.callService("danfoss_link", "set_schedule", data, {
-            entity_id: this._config.entity,
+            entity_id: this._entity,
           });
         }
         this._draft = null;
@@ -310,6 +423,10 @@ const STYLE = `
   ha-card { overflow: hidden; }
   .header { padding: 16px 16px 0; font-size: 1.2em; font-weight: 500; color: var(--primary-text-color); }
   .content { padding: 12px 16px 16px; color: var(--primary-text-color); }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 16px 0; }
+  .tab { border-radius: 16px; padding: 4px 12px; font-size: 0.9em; color: var(--primary-text-color); font-weight: 400; }
+  .tab.selected { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); font-weight: 500; }
+  .tab.dirty::after { content: " •"; }
   .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.9em; margin-bottom: 8px; color: var(--secondary-text-color); }
   .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px;
             background: var(--dl-away, rgba(66,133,244,0.18)); }
@@ -322,10 +439,15 @@ const STYLE = `
   .ticks span:last-child { transform: translateX(-100%); }
   .day { font-size: 0.85em; color: var(--secondary-text-color); text-transform: capitalize; min-width: 2.5em; }
   .day.changed { color: var(--primary-color); font-weight: 600; }
-  .track { position: relative; display: grid; grid-template-columns: repeat(96, 1fr); height: 26px;
+  .track { position: relative; display: grid; grid-template-columns: repeat(96, 1fr); height: 30px;
            border-radius: 6px; overflow: hidden; background: var(--dl-away, rgba(66,133,244,0.18)); cursor: crosshair; }
   .cell { background: transparent; }
   .cell.hour { box-shadow: inset 1px 0 0 rgba(127,127,127,0.18); }
+  .labels { position: absolute; inset: 0; pointer-events: none; }
+  .label { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center;
+           overflow: hidden; white-space: nowrap; font-size: 11px; font-weight: 500; line-height: 1.1;
+           color: var(--dl-home-text, #fff); font-variant-numeric: tabular-nums; }
+  .label.stacked { flex-direction: column; font-size: 10px; }
   .now { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--primary-text-color); opacity: 0.7; pointer-events: none; }
   .note, .hint { margin-top: 10px; font-size: 0.85em; color: var(--secondary-text-color); }
   .error { margin-top: 10px; color: var(--error-color, #db4437); font-size: 0.9em; }

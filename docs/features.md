@@ -58,17 +58,23 @@ data:
 ### Schedule card
 
 The integration also brings a dashboard card for the schedule; nothing extra
-to install. Edit a dashboard, add a card and pick **Danfoss Link schedule**
-(or use `type: custom:danfoss-link-schedule-card` with `entity:` set to a
-thermostat). Drag over the grid to paint *at home* or *away*; drag down to
-change several days at once. **Save** sends the changed days with the
-`set_schedule` action.
+to install. Edit a dashboard, add a card and pick **Danfoss Link schedule**.
+By default it shows every Danfoss Link thermostat, one tab per room; the
+living zone's rooms share one tab, as they share one schedule. Pick
+thermostats in the card settings to show only those.
+
+Each *at home* block shows its start and end time. Drag over the grid to
+paint *at home* or *away*; drag down to change several days at once.
+**Save** sends the changed days with the `set_schedule` action.
 
 ![Schedule card](images/schedule-card.png)
 
 ```yaml
 type: custom:danfoss-link-schedule-card
-entity: climate.bedroom
+# Optional; leave out for every Danfoss Link thermostat.
+entities:
+  - climate.bedroom
+  - climate.bathroom
 ```
 
 Diagnostic entities marked *disabled by default* can be turned on under the
