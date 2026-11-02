@@ -271,8 +271,9 @@ PATCH api/zones/living <- {"name": ..., "schedule": {...}}   (living zone)
   living-zone room fails (seen on Ole's CC): HTTP 400 "Can't change
   regulation type of rooms that are part of the Living Zone".
 - Ole's CC (firmware 4.2.1724, 2026-11-02) leaves `schedule` out of
-  `GET api/rooms`; the app's `/api/rooms/` + id points to `GET api/rooms/{id}`
-  as where it reads it (not yet confirmed live). The integration reads each
+  `GET api/rooms`, but `GET api/rooms/{id}` has it (confirmed live the same
+  day for all 8 rooms, living zone rooms all showing the zone's schedule;
+  `HH:MM:SS` times and `1.00:00:00` parsed as expected). The integration reads each
   room's schedule from there once at start and then hourly, and logs the
   detail's keys at debug level when it has no `schedule`.
 - The integration shows a room's schedule read-only as climate attributes:
