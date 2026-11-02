@@ -24,6 +24,9 @@ _LOGGER = logging.getLogger(__name__)
 # poll more often meanwhile, before marking the entities unavailable.
 OUTAGE_GRACE_PERIOD = timedelta(minutes=5)
 OUTAGE_RETRY_INTERVAL = timedelta(seconds=15)
+# GET api/rooms leaves out each room's weekly schedule; the app reads it from
+# GET api/rooms/{id}. Schedules rarely change, so fetch them this often.
+SCHEDULE_REFRESH_INTERVAL = timedelta(hours=1)
 
 # Endpoints that may legitimately be missing on some firmware versions.
 OPTIONAL_ENDPOINTS = {
@@ -77,6 +80,9 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
         # Device registry id of the CC, set at setup so rooms can link to it.
         self.controller_device_id: str | None = None
         self._lock = asyncio.Lock()
+        # room id -> weekly schedule from api/rooms/{id}, and when it was read.
+        self._schedules: dict[int, dict[str, Any]] = {}
+        self._schedules_fetched: datetime | None = None
 
     async def _call(self, func: Any, *args: Any) -> Any:
         async with self._lock:
@@ -118,6 +124,7 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
             info=info,
             rooms={room["id"]: room for room in rooms if "id" in room},
         )
+        self._add_schedules(data.rooms)
         for key, uri in OPTIONAL_ENDPOINTS.items():
             try:
                 value = client.get(uri)
@@ -130,6 +137,37 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
                 value = {dev["id"]: dev for dev in value if "id" in dev}
             setattr(data, key, value)
         return data
+
+    def _add_schedules(self, rooms: dict[int, dict[str, Any]]) -> None:
+        """Add each room's weekly schedule, read from api/rooms/{id} hourly."""
+        now = dt_util.utcnow()
+        if (
+            self._schedules_fetched is None
+            or now - self._schedules_fetched >= SCHEDULE_REFRESH_INTERVAL
+        ):
+            schedules: dict[int, dict[str, Any]] = {}
+            for room_id, room in rooms.items():
+                if isinstance(room.get("schedule"), dict):
+                    continue
+                try:
+                    detail = self.client.get(f"/api/rooms/{room_id}")
+                except RequestError as err:
+                    _LOGGER.debug("No schedule for room %s: %s", room_id, err)
+                    continue
+                schedule = detail.get("schedule") if isinstance(detail, dict) else None
+                if isinstance(schedule, dict):
+                    schedules[room_id] = schedule
+                else:
+                    _LOGGER.debug(
+                        "Room %s detail has no schedule, keys: %s",
+                        room_id,
+                        sorted(detail) if isinstance(detail, dict) else type(detail).__name__,
+                    )
+            self._schedules = schedules
+            self._schedules_fetched = now
+        for room_id, schedule in self._schedules.items():
+            if room_id in rooms and not isinstance(rooms[room_id].get("schedule"), dict):
+                rooms[room_id]["schedule"] = schedule
 
     async def async_write(self, method: str, uri: str, content: dict[str, Any]) -> None:
         """Send a change to the CC, then refresh."""

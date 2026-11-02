@@ -230,6 +230,9 @@ async def test_setup_creates_entities(hass: HomeAssistant, fake: FakeMDG) -> Non
     assert week["sunday"] == ["07:30-24:00"]
     assert living.attributes["schedule_today"] in (week["monday"], week["sunday"])
     assert "schedule" not in bathroom.attributes
+    # Schedules come from api/rooms/{id}, read once and then hourly, not every poll.
+    await entry.runtime_data.async_refresh()
+    assert [r for r in fake.requests if r[1] == "/api/rooms/0"] == [("GET", "/api/rooms/0", None)]
 
     assert hass.states.get("sensor.living_room_temperature").state == "20.6"
     alarms = hass.states.get("sensor.my_home_unread_alarms")

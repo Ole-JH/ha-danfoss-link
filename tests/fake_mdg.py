@@ -426,6 +426,17 @@ class FakeMDG:
         if method != "GET" and self.reject_writes:
             return 400, {"errorMessages": ["JSON content does not conform to JSON Schema."]}
         if method == "GET":
+            # Like a real CC: the room list leaves out schedules, the room itself has it.
+            if uri == "/api/rooms":
+                return 200, [
+                    {k: v for k, v in room.items() if k != "schedule"}
+                    for room in self.state[uri]
+                ]
+            if uri.startswith("/api/rooms/"):
+                room_id = uri.removeprefix("/api/rooms/")
+                for room in self.state["/api/rooms"]:
+                    if str(room["id"]) == room_id:
+                        return 200, room
             if uri in self.state:
                 return 200, self.state[uri]
             return 404, {"errorMessages": ["Not found"]}
