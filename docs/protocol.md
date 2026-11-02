@@ -287,7 +287,9 @@ PATCH api/zones/living <- {"name": ..., "schedule": {...}}   (living zone)
   2026-11-02 for a single room and for the living zone (one PATCH per day).
   Each relay round trip is slow, so the integration now sends all chosen
   days in one PATCH (`{"schedule": {"monday": [...], "tuesday": [...]}}`)
-  and falls back to one PATCH per day if the CC refuses it. It then updates
+  and falls back to one PATCH per day if the CC refuses it. Ole's CC took a
+  two-day PATCH on `api/rooms/3` without the fallback (2026-11-02); the round
+  trip took about 3.6 s. It then updates
   its cached schedules from what it sent instead of reading every room again.
 - The system-wide schedule (`schedule` / `normalSchedule` in
   `api/system/status`) is a flat period list for today, read-only in the app.
