@@ -137,7 +137,8 @@
           "asleep": "Asleep",
           "vacation": "Vacation",
           "pause": "Pause",
-          "boost": "Boost"
+          "boost": "Boost",
+          "manual": "Manual"
         }
       },
       "wifi_signal": {

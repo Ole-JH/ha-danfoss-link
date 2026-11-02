@@ -325,6 +325,48 @@ PUT api/modes/vacation <- {"type": "Vacation", "state": "Inactive"}   (cancel / 
 The integration exposes this as the `danfoss_link.plan_vacation` and
 `danfoss_link.cancel_vacation` actions plus Vacation start/end sensors.
 
+Live test on Ole's CC (2026-11-02, firmware 4.2.1724, integration 0.3.1), via
+Home Assistant, every change put back afterwards:
+
+- **Manual leaves the AtHome override.** With AtHome active for rooms
+  `[0,2,3,5,6,7,8,9]`, switching a room (or the living zone) to Manual removes
+  it from the mode's `rooms`. Switching back to Schedule does not add it
+  back: after living zone Manual -> Schedule the mode read
+  `rooms: [2], endTime: <end of the current schedule period>`, `currentState`
+  was `Away`, and the living rooms ran their away setpoints while the house
+  mode still said AtHome. Once (rooms left: only a Manual room) the whole
+  AtHome mode ended instead; not yet pinned down when the CC ends it versus
+  trimming it. Ending AtHome and sending it again with every room brings
+  them all back (`endTime` back to `2099-12-31T23:59:59`). The integration
+  now does that when it switches rooms back to Schedule, re-selecting At home
+  does it too, and the House mode select shows the covered rooms in an
+  `at_home_rooms` attribute.
+- **`currentState: "Manual"`** is reported while the living zone is on
+  Manual (seen with one other room on Schedule). Rooms on Manual report
+  `state: "Normal"`, `mode: "Manual"`; rooms covered by AtHome report
+  `state: "AtHome"`, `mode: "AtHome"`; rooms following the schedule
+  `state: "Normal"`.
+- **Room on Manual + `setpoint.temperature`** also updates
+  `regulation.manualSetpoint`.
+- **Planning a vacation ends an active AtHome** at once, even with the
+  vacation weeks away. The vacation mode read `state: "Planned"` with the
+  sent `startTime`/`endTime` (CC local time, no suffix, as `systemTime` ends
+  in `+01:00`). Cancelling left every mode Inactive, so AtHome has to be
+  turned on again afterwards.
+- **Pause** (`PUT api/modes/pause` Active) ended AtHome by itself, set every
+  room (Manual ones too) to the pause setpoint (6) with `state: "Pause"`, and
+  `currentState: "Pause"`. Pause -> AtHome (Inactive, then Active with rooms)
+  restored everything.
+- **On/off device on a dead node** (`Gulvtermostat 1`, node-dead alarm since
+  May): `PATCH state: On` was accepted and read back `On` about 30 s later,
+  so the CC stores the state even though the node is gone.
+- **CC clock**: `systemTime` ran about 18 minutes ahead of Home Assistant
+  (mode `startTime` 14:02:54 for a PUT made at 13:44:36), so mode times are
+  in the CC's own clock.
+- A `PEER_NOT_AVAILABLE` relay drop during the test failed one write with
+  "Cannot reach the Danfoss Link CC"; the entities stayed available (the
+  0.3.1 grace period) and the next write went through.
+
 ### Reconstructed protobuf schemas
 
 Reconstructed from the descriptor tables in `mdg_*_pb.lua` (field names,

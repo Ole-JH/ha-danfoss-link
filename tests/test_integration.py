@@ -434,6 +434,80 @@ async def test_house_mode(hass: HomeAssistant, fake: FakeMDG) -> None:
     assert hass.states.get(entity).state == "schedule"
 
 
+async def test_room_back_on_schedule_rejoins_at_home(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: house, "option": "at_home"},
+        blocking=True,
+    )  # fmt: skip
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["at_home_rooms"] == ["Living room", "Bathroom"]
+
+    # Manual takes the living zone out of the override on the CC ...
+    await hass.services.async_call(
+        CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE,
+        {ATTR_ENTITY_ID: "climate.living_room", ATTR_HVAC_MODE: HVACMode.HEAT}, blocking=True,
+    )  # fmt: skip
+    await hass.async_block_till_done()
+    assert hass.states.get(house).state == "at_home"
+    assert hass.states.get(house).attributes["at_home_rooms"] == ["Bathroom"]
+
+    # ... and Schedule puts it back.
+    fake.requests.clear()
+    await hass.services.async_call(
+        CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE,
+        {ATTR_ENTITY_ID: "climate.living_room", ATTR_HVAC_MODE: HVACMode.AUTO}, blocking=True,
+    )  # fmt: skip
+    writes = [r for r in fake.requests if r[0] != "GET"]
+    assert writes == [
+        ("PATCH", "/api/zones/living", {"name": "Living", "regulationType": "Schedule"}),
+        ("PUT", "/api/modes/athome", {"type": "AtHome", "state": "Inactive"}),
+        ("PUT", "/api/modes/athome", {"type": "AtHome", "state": "Active", "rooms": [0, 1]}),
+    ]
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["at_home_rooms"] == ["Living room", "Bathroom"]
+
+
+async def test_schedule_without_at_home_sends_no_mode(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: "select.bathroom_mode", "option": "schedule"}, blocking=True,
+    )  # fmt: skip
+    assert not [r for r in fake.requests if r[0] != "GET" and r[1].startswith("/api/modes")]
+
+
+async def test_reselecting_at_home_covers_all_rooms(hass: HomeAssistant, fake: FakeMDG) -> None:
+    fake.state["/api/modes"][0] = {"type": "AtHome", "state": "Active", "rooms": [1]}
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    assert hass.states.get(house).attributes["at_home_rooms"] == ["Bathroom"]
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: house, "option": "at_home"},
+        blocking=True,
+    )  # fmt: skip
+    writes = [r for r in fake.requests if r[0] != "GET"]
+    assert writes == [
+        ("PUT", "/api/modes/athome", {"type": "AtHome", "state": "Inactive"}),
+        ("PUT", "/api/modes/athome", {"type": "AtHome", "state": "Active", "rooms": [0, 1]}),
+    ]
+
+    # Already covering every room: nothing to send.
+    fake.requests.clear()
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: house, "option": "at_home"},
+        blocking=True,
+    )  # fmt: skip
+    assert not [r for r in fake.requests if r[0] != "GET"]
+
+
+async def test_house_state_manual(hass: HomeAssistant, fake: FakeMDG) -> None:
+    fake.state["/api/system/status"] = {"currentState": "Manual"}
+    await _setup(hass)
+    assert hass.states.get("sensor.my_home_house_state").state == "manual"
+
+
 async def test_switch_and_numbers(hass: HomeAssistant, fake: FakeMDG) -> None:
     await _setup(hass)
     await hass.services.async_call(

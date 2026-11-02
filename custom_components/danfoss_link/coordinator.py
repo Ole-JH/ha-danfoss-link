@@ -15,7 +15,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .api import CannotConnect, DanfossLinkClient, DanfossLinkError, RequestError
-from .const import DOMAIN
+from .const import DOMAIN, MODE_ACTIVE, MODE_AT_HOME, MODE_ENDPOINTS, MODE_INACTIVE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -133,15 +133,48 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
 
     async def async_write(self, method: str, uri: str, content: dict[str, Any]) -> None:
         """Send a change to the CC, then refresh."""
-        await self._send(method, uri, content)
+        await self.async_send(method, uri, content)
         # Not debounced: the UI should show what the CC accepted right away.
         await self.async_refresh()
+
+    def active_at_home(self) -> dict[str, Any] | None:
+        """The active "home now" (AtHome) override, if any."""
+        return next(
+            (
+                mode
+                for mode in self.data.modes
+                if mode.get("type") == MODE_AT_HOME and mode.get("state") == MODE_ACTIVE
+            ),
+            None,
+        )
+
+    async def async_start_at_home(self, rooms: list[int], *, restart: bool = False) -> None:
+        """Turn on the AtHome override for these rooms (without refreshing).
+
+        The CC drops a room from an active AtHome override when the room is
+        switched to Manual, and does not add it back when it returns to
+        Schedule. ``restart`` ends the override first so it can be sent again
+        with the full room list.
+        """
+        uri = f"/api/modes/{MODE_ENDPOINTS[MODE_AT_HOME]}"
+        if restart:
+            await self._send("PUT", uri, {"type": MODE_AT_HOME, "state": MODE_INACTIVE})
+        await self._send(
+            "PUT",
+            uri,
+            # The CC requires the list of rooms the mode applies to.
+            {"type": MODE_AT_HOME, "state": MODE_ACTIVE, "rooms": sorted(rooms)},
+        )
 
     async def async_mark_alarms_read(self, alarm_ids: list[int]) -> None:
         """Mark alarms as read, as the app does when one is opened."""
         for alarm_id in alarm_ids:
             await self._send("PATCH", f"/api/alarms/{alarm_id}", {"isRead": True, "id": alarm_id})
         await self.async_refresh()
+
+    async def async_send(self, method: str, uri: str, content: dict[str, Any]) -> None:
+        """Send a change to the CC without refreshing."""
+        await self._send(method, uri, content)
 
     async def _send(self, method: str, uri: str, content: dict[str, Any]) -> None:
         _LOGGER.debug("%s %s %s", method, uri, content)

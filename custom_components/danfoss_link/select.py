@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -76,10 +78,36 @@ class DanfossLinkHouseMode(DanfossLinkEntity, SelectEntity):
         active = self._active_type()
         return _OPTIONS[active] if active else _SCHEDULE
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        at_home = self.coordinator.active_at_home()
+        if at_home is None:
+            return None
+        rooms = self.coordinator.data.rooms
+        # The rooms the "home now" override covers; rooms switched to Manual
+        # drop out of it on the CC.
+        return {
+            "at_home_rooms": [
+                rooms[room_id].get("name") or f"Room {room_id}"
+                for room_id in at_home.get("rooms") or []
+                if room_id in rooms
+            ]
+        }
+
     async def async_select_option(self, option: str) -> None:
         target = _TYPES.get(option)
         current = self._active_type()
+        all_rooms = sorted(self.coordinator.data.rooms)
         if current == target:
+            at_home = self.coordinator.active_at_home()
+            if (
+                target == MODE_AT_HOME
+                and at_home is not None
+                and not set(at_home.get("rooms") or []).issuperset(all_rooms)
+            ):
+                # Selecting At home again brings every room back in.
+                await self.coordinator.async_start_at_home(all_rooms, restart=True)
+                await self.coordinator.async_refresh()
             return
         # AtHome is an override too ("home now"); only switching to another
         # mode replaces it, going back to the schedule has to end it.
@@ -92,15 +120,12 @@ class DanfossLinkHouseMode(DanfossLinkEntity, SelectEntity):
         if target is None:
             return
         if target == MODE_AT_HOME:
-            content = {
-                "type": MODE_AT_HOME,
-                "state": MODE_ACTIVE,
-                # The CC requires the list of rooms the mode applies to.
-                "rooms": sorted(self.coordinator.data.rooms),
-            }
-        else:
-            content = {"type": target, "state": MODE_ACTIVE}
-        await self.coordinator.async_write("PUT", f"/api/modes/{MODE_ENDPOINTS[target]}", content)
+            await self.coordinator.async_start_at_home(all_rooms)
+            await self.coordinator.async_refresh()
+            return
+        await self.coordinator.async_write(
+            "PUT", f"/api/modes/{MODE_ENDPOINTS[target]}", {"type": target, "state": MODE_ACTIVE}
+        )
 
 
 class DanfossLinkRoomMode(DanfossLinkRoomEntity, SelectEntity):

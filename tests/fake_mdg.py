@@ -391,6 +391,13 @@ class FakeMDG:
         body = json.dumps(message).encode()
         tls.sendall(struct.pack(">H", len(body)) + body)
 
+    def _drop_from_at_home(self, room_ids: list[int]) -> None:
+        # As seen on a real CC: a room switched to Manual leaves an active
+        # AtHome override and does not come back on Schedule.
+        for mode in self.state["/api/modes"]:
+            if mode["type"] == "AtHome" and mode["state"] == "Active":
+                mode["rooms"] = [r for r in mode.get("rooms", []) if r not in room_ids]
+
     def _handle(self, method: str, uri: str, content: Any) -> tuple[int, Any]:
         self.requests.append((method, uri, content))
         if method != "GET" and self.reject_writes:
@@ -416,11 +423,17 @@ class FakeMDG:
                             room.setdefault(key, {}).update(value)
                         else:
                             room[key] = value
+                    if content.get("regulation", {}).get("type") == "Manual":
+                        self._drop_from_at_home([room["id"]])
             return 200, None
         if method == "PATCH" and uri == "/api/zones/living":
             for room in self.state["/api/rooms"]:
                 if room.get("zone") == "Living" and "regulationType" in content:
                     room["regulation"]["type"] = content["regulationType"]
+            if content.get("regulationType") == "Manual":
+                self._drop_from_at_home(
+                    [r["id"] for r in self.state["/api/rooms"] if r.get("zone") == "Living"]
+                )
             return 200, None
         if method == "PUT" and uri.startswith("/api/modes/"):
             for mode in self.state["/api/modes"]:

@@ -72,6 +72,8 @@ _HOUSE_STATES = {
     "Vacation": "vacation",
     "Pause": "pause",
     "Boost": "boost",
+    # Seen live when the living zone is on Manual.
+    "Manual": "manual",
 }
 
 
