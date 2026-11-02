@@ -7,7 +7,7 @@ release PR to `main` is merged.
 ## 0.3.2
 
 ### Fixes
-- Rooms switched back from Manual to Schedule now rejoin an active *At home* period. Before, the CC dropped a room from *At home* when it went to Manual and never added it back, so it ran its away setpoint while the house said At home. Selecting *At home* again also re-covers every room, and *At home* is now always sent with every room so it stays open-ended instead of ending at the next schedule period.
+- A room you switch to Manual and then back to Schedule while the house is *At home* now gets its at-home temperature again. Before, the Danfoss controller quietly left that room out of *At home*, so it heated to its away temperature even though the house said At home.
 - The House state sensor shows **Manual** instead of *unknown* when the CC reports a manual house state.
 - On/off devices (e.g. floor-heating relays) show as unavailable while the CC reports "no response from unit" for them, instead of looking like they switched when nothing happened.
 
