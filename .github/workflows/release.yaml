@@ -2,7 +2,10 @@ name: Release
 
 # Creates the git tag and GitHub release for the version in manifest.json.
 # Versions with a PEP 440 pre-release suffix (a, b, rc, e.g. 0.3.0b1) are
-# published as pre-releases. Does nothing if the tag already exists.
+# published as pre-releases. Does nothing if the release already exists.
+#
+# Release notes come from the matching "## <version>" section of CHANGELOG.md.
+# Without one, they list the commits since the previous release tag.
 
 on:
   push:
@@ -23,6 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Read version
         id: version
@@ -34,8 +39,49 @@ jobs:
           fi
           prerelease=false
           [[ "$version" =~ (a|b|rc)[0-9]+$ ]] && prerelease=true
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Write release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          # Section of CHANGELOG.md under "## <version>" (or "## [<version>]"),
+          # up to the next "## " heading.
+          if [[ -f CHANGELOG.md ]]; then
+            awk -v v="$VERSION" '
+              /^## / {
+                h = $0; sub(/^## +/, "", h); sub(/^\[/, "", h)
+                split(h, w, /[] ]/)
+                if (found) exit
+                if (w[1] == v || w[1] == "v" v) { found = 1; next }
+              }
+              found { print }
+            ' CHANGELOG.md | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}' > notes.md
+          else
+            : > notes.md
+          fi
+
+          # Previous release tag reachable from this commit, for the compare link.
+          prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude "$TAG" HEAD 2>/dev/null || true)
+
+          if [[ ! -s notes.md ]]; then
+            echo "::warning::No '## $VERSION' section in CHANGELOG.md, listing commits instead."
+            range=${prev:+$prev..}HEAD
+            {
+              echo "## Changes"
+              git log --no-merges --format='- %s (%h)' "$range" \
+                | grep -v -E '^- Release [0-9]' || true
+            } > notes.md
+          fi
+
+          if [[ -n "$prev" ]]; then
+            printf '\n**Full Changelog**: %s/compare/%s...%s\n' "$REPO_URL" "$prev" "$TAG" >> notes.md
+          fi
+          cat notes.md
 
       - name: Create release
         env:
@@ -47,10 +93,10 @@ jobs:
             echo "Release $TAG already exists, nothing to do."
             exit 0
           fi
-          args=(--target "$GITHUB_SHA" --title "$TAG" --generate-notes)
+          args=(--target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md)
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
             echo "Tag $TAG exists, creating the release for it."
-            args=(--verify-tag --title "$TAG" --generate-notes)
+            args=(--verify-tag --title "$TAG" --notes-file notes.md)
           fi
           [[ "$PRERELEASE" == true ]] && args+=(--prerelease)
           gh release create "$TAG" "${args[@]}"
