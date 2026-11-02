@@ -9,7 +9,7 @@
 | `select` house mode | CC | Schedule (no override) / At home / Vacation / Pause (/ Boost if your CC has it) |
 | `sensor` house state | CC | What the CC is doing now: at home / away / asleep from the schedule, or the active mode |
 | `number` vacation temperature | CC | Temperature used in vacation mode |
-| `sensor` pause end | CC | When a running pause ends; unknown when there is no pause or it runs until you resume |
+| `sensor` pause start / end | CC | When a planned or running pause starts and ends; unknown when there is none (or no end: until resumed) |
 | `sensor` vacation start / end | CC | When a planned or running vacation starts and ends; unknown when none is planned |
 | `switch` | on/off device | Link on/off outputs; unavailable while the CC reports "no response from unit" for them |
 | `sensor` unread alarms | CC | Count plus details (low battery, lost device, ...) |
@@ -85,35 +85,44 @@ temperature (6 °C by default) until the pause ends, then the CC follows its
 weekly schedule again. A pause replaces *At home* and *Vacation*.
 
 - **House mode → Pause** pauses until you pick another house mode.
-- The `danfoss_link.pause` action targets the house mode select and takes a
-  `duration` or an `end`, or neither to pause until resumed. Pausing again
-  while paused moves the end. Resume by selecting **Schedule** (or another
-  house mode).
-- The house mode select has `pause_end` and `pause_temperature` attributes,
-  and the **Pause end** sensor holds the end time for automations.
+- The `danfoss_link.pause` action targets the house mode select. Give a
+  `duration` or an `end`, or neither to pause until resumed, and a `start`
+  to plan the pause for later (the CC starts it by itself). Pausing again
+  while paused moves the end. `danfoss_link.cancel_pause` ends a running
+  pause or cancels a planned one.
+- The house mode select has `pause_state` (`active`, `planned` or none),
+  `pause_start`, `pause_end` and `pause_temperature` attributes, and the same
+  `vacation_*` ones. The **Pause start** / **Pause end** sensors hold the
+  times for automations.
+- The CC runs modes on its own clock, which can be minutes off (one ran 18
+  minutes fast). The integration measures the difference on every poll and
+  corrects pause and vacation times for it.
 
 ```yaml
 action: danfoss_link.pause
 target:
   entity_id: select.my_home_house_mode
 data:
-  duration: "02:00:00"
+  start: "2026-12-24 14:00:00"
+  duration: "04:00:00"
 ```
 
-### Pause card
+### Pause and vacation card
 
-A second dashboard card, **Danfoss Link pause**, comes with the integration.
-It shows whether the heating is paused, until when and how long is left, and
-the pause temperature. Pause for 1, 2, 4 or 8 hours with one tap, until a
-time you pick, or until you resume; while paused, add an hour, change the end
-or resume the schedule.
+A second dashboard card, **Danfoss Link pause & vacation**, comes with the
+integration. It shows whether the heating is paused or on vacation, until
+when and how long is left, and what is planned. Pause now for 1, 2, 4 or 8
+hours or until you resume, plan a pause or a vacation, change or cancel a
+plan, add an hour to a pause or end it early. Turn **Show pause** or **Show
+vacation** off in the card settings to show only one of them.
 
 ```yaml
-type: custom:danfoss-link-pause-card
-# Optional; leave out for the (first) Danfoss Link house mode.
-entity: select.my_home_house_mode
-# Optional quick choices, in hours.
-durations: [1, 2, 4, 8]
+type: custom:danfoss-link-away-card
+# All optional.
+entity: select.my_home_house_mode   # default: the (first) Danfoss Link house mode
+show_pause: true
+show_vacation: true
+durations: [1, 2, 4, 8]             # quick pause choices, in hours
 ```
 
 Diagnostic entities marked *disabled by default* can be turned on under the
@@ -134,7 +143,7 @@ How the integration compares with the Danfoss Link app (1.3.x).
 | At-home / away temperatures | ✅ | Number entities per room |
 | Living zone (shared mode for its rooms) | ✅ | Mode changes are sent to the whole zone |
 | House modes: at home, vacation, pause, boost | ✅ | House mode select and house state sensor |
-| Pause with an end time | ✅ | `pause` action and the pause card |
+| Pause with an end time, planned pause | ✅ | `pause` / `cancel_pause` actions and the pause & vacation card |
 | Vacation temperature | ✅ | Number entity |
 | Planned vacation with dates | ✅ | `plan_vacation` / `cancel_vacation` actions |
 | On/off devices | ✅ | Switch entities |

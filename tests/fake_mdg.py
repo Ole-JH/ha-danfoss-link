@@ -501,7 +501,7 @@ class FakeMDG:
                     mode.update(content)
                     # Like the app's demo CC: a vacation with a start is planned.
                     if (
-                        mode["type"] == "Vacation"
+                        mode["type"] in ("Vacation", "Pause")
                         and "startTime" in content
                         and mode["state"] == "Active"
                     ):

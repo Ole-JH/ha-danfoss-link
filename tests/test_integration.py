@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import functools
 import json
 from pathlib import Path
@@ -46,7 +46,7 @@ from custom_components.danfoss_link.api import (
     pair_with_code,
     pairing as pairing_module,
 )
-from custom_components.danfoss_link.cc_time import parse_cc_time
+from custom_components.danfoss_link.cc_time import clock_drift, parse_cc_time
 from custom_components.danfoss_link.const import (
     CONF_CERT_PEM,
     CONF_CODE,
@@ -858,6 +858,98 @@ async def test_pause_cc_local_time(hass: HomeAssistant, fake: FakeMDG) -> None:
     assert hass.states.get(house).attributes["pause_end"] == "2030-01-05T11:00:00+01:00"
 
 
+async def test_planned_pause(hass: HomeAssistant, fake: FakeMDG, freezer) -> None:
+    freezer.move_to("2030-07-01T12:00:00+00:00")
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        DOMAIN,
+        "pause",
+        {"start": "2030-07-01T18:00:00+00:00", "duration": {"hours": 3}},
+        target={ATTR_ENTITY_ID: house},
+        blocking=True,
+    )
+    assert _mode_writes(fake) == [
+        (
+            "PUT",
+            "/api/modes/pause",
+            {
+                "type": "Pause",
+                "state": "Active",
+                "startTime": "2030-07-01T18:00:00Z",
+                "endTime": "2030-07-01T21:00:00Z",
+            },
+        )
+    ]
+    await hass.async_block_till_done()
+    state = hass.states.get(house)
+    # Planned: the house keeps following its schedule until then.
+    assert state.state == "schedule"
+    assert state.attributes["pause_state"] == "planned"
+    assert state.attributes["pause_start"] == "2030-07-01T18:00:00+00:00"
+    assert state.attributes["pause_end"] == "2030-07-01T21:00:00+00:00"
+    assert hass.states.get("sensor.my_home_pause_start").state == "2030-07-01T18:00:00+00:00"
+
+    fake.requests.clear()
+    await hass.services.async_call(
+        DOMAIN, "cancel_pause", {}, target={ATTR_ENTITY_ID: house}, blocking=True
+    )
+    assert _mode_writes(fake) == [
+        ("PUT", "/api/modes/pause", {"type": "Pause", "state": "Inactive"})
+    ]
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["pause_state"] is None
+    assert hass.states.get("sensor.my_home_pause_start").state == "unknown"
+
+
+async def test_pause_start_in_past_pauses_now(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    await hass.services.async_call(
+        DOMAIN,
+        "pause",
+        {"start": "2020-01-01 10:00:00"},
+        target={ATTR_ENTITY_ID: "select.my_home_house_mode"},
+        blocking=True,
+    )
+    assert _mode_writes(fake) == [("PUT", "/api/modes/pause", {"type": "Pause", "state": "Active"})]
+
+
+async def test_mode_times_follow_cc_clock(hass: HomeAssistant, fake: FakeMDG, freezer) -> None:
+    # Ole's CC ran 18 minutes fast: send and show times on its clock.
+    freezer.move_to("2030-07-01T12:00:00+00:00")
+    fake.state["/api/system/info"]["systemTime"] = "2030-07-01T14:18:30+02:00"
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        DOMAIN, "pause", {"duration": {"minutes": 20}}, target={ATTR_ENTITY_ID: house},
+        blocking=True,
+    )  # fmt: skip
+    assert _mode_writes(fake)[0][2]["endTime"] == "2030-07-01T14:38:00"
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["pause_end"] == "2030-07-01T14:20:00+02:00"
+    await hass.services.async_call(
+        DOMAIN,
+        "plan_vacation",
+        {"start": "2030-07-10T10:00:00+00:00", "end": "2030-07-12T10:00:00+00:00"},
+        blocking=True,
+    )
+    assert _vacation_writes(fake)[-1][2]["startTime"] == "2030-07-10T12:18:00"
+    await hass.async_block_till_done()
+    attrs = hass.states.get(house).attributes
+    assert attrs["vacation_state"] == "planned"
+    assert attrs["vacation_start"] == "2030-07-10T12:00:00+02:00"
+    assert attrs["vacation_temperature"] == 15.0
+
+
+def test_clock_drift() -> None:
+    now = datetime(2030, 7, 1, 12, 0, tzinfo=UTC)
+    assert clock_drift({"systemTime": "2030-07-01T12:18:30Z"}, now) == timedelta(minutes=18)
+    assert clock_drift({"systemTime": "2030-07-01T13:55:00+02:00"}, now) == timedelta(minutes=-5)
+    # Hours off is a wrong clock, not drift; and no systemTime at all.
+    assert clock_drift({"systemTime": "2030-07-01T15:00:00Z"}, now) == timedelta(0)
+    assert clock_drift({}, now) == timedelta(0)
+
+
 @pytest.mark.parametrize(
     ("entity", "data", "error"),
     [
@@ -1117,7 +1209,7 @@ async def test_cards_registered(hass: HomeAssistant) -> None:
 
     assert CARD_URLS == (
         "/danfoss_link/danfoss-link-schedule-card.js",
-        "/danfoss_link/danfoss-link-pause-card.js",
+        "/danfoss_link/danfoss-link-away-card.js",
     )
     hass.http = MagicMock(async_register_static_paths=AsyncMock())
     with patch("homeassistant.components.frontend.add_extra_js_url") as add_js:

@@ -150,6 +150,9 @@
       "vacation_end": {
         "name": "Vacation end"
       },
+      "pause_start": {
+        "name": "Pause start"
+      },
       "pause_end": {
         "name": "Pause end"
       }
@@ -217,8 +220,12 @@
     },
     "pause": {
       "name": "Pause heating",
-      "description": "Pauses heating on the CC: every room, Manual ones too, holds the pause temperature until the end time or until you choose another house mode. Pausing again while paused moves the end time. Give a duration or an end, or neither to pause until resumed.",
+      "description": "Pauses heating on the CC: every room, Manual ones too, holds the pause temperature until the end time or until you choose another house mode. Give a start to plan the pause for later; the CC starts it by itself. Give a duration or an end, or neither to pause until resumed. Pausing again while paused moves the end time.",
       "fields": {
+        "start": {
+          "name": "Start",
+          "description": "Plan the pause to start later. Leave out to pause now."
+        },
         "duration": {
           "name": "Duration",
           "description": "How long to pause, e.g. 2 hours."
@@ -228,6 +235,10 @@
           "description": "When the pause ends and the CC follows its weekly schedule again."
         }
       }
+    },
+    "cancel_pause": {
+      "name": "Cancel pause",
+      "description": "Ends a running pause, or cancels a planned one. The CC then follows its weekly schedule."
     }
   },
   "exceptions": {
@@ -254,6 +265,9 @@
     },
     "pause_end_in_past": {
       "message": "The pause must end in the future."
+    },
+    "pause_end_before_start": {
+      "message": "The pause must end after it starts."
     }
   },
   "selector": {

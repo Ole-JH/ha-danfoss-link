@@ -10,7 +10,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .cc_time import format_cc_time, parse_cc_time
 from .const import (
     DOMAIN,
     MODE_ACTIVE,
@@ -18,6 +17,8 @@ from .const import (
     MODE_ENDPOINTS,
     MODE_INACTIVE,
     MODE_PAUSE,
+    MODE_PLANNED,
+    MODE_VACATION,
     REGULATION_MANUAL,
     REGULATION_SCHEDULE,
 )
@@ -49,6 +50,16 @@ async def async_setup_entry(
     if any(mode.get("type") in _OPTIONS for mode in coordinator.data.modes):
         entities.append(DanfossLinkHouseMode(coordinator))
     async_add_entities(entities)
+
+
+def mode_state(mode: dict[str, Any]) -> str | None:
+    """ "active", "planned" or None for a mode from api/modes."""
+    state = mode.get("state")
+    if state == MODE_PLANNED:
+        return "planned"
+    if state == MODE_ACTIVE:
+        return "active"
+    return None
 
 
 class DanfossLinkHouseMode(DanfossLinkEntity, SelectEntity):
@@ -95,44 +106,61 @@ class DanfossLinkHouseMode(DanfossLinkEntity, SelectEntity):
                 for room_id in at_home.get("rooms") or []
                 if room_id in rooms
             ]
-        if any(mode.get("type") == MODE_PAUSE for mode in self.coordinator.data.modes):
-            # For the pause card: when a running pause ends (None: until
-            # resumed) and the temperature every room holds meanwhile.
-            attrs["pause_end"] = None
-            if (pause := self._active_mode(MODE_PAUSE)) is not None:
-                end = parse_cc_time(pause, "endTime", self.coordinator.data.info)
-                attrs["pause_end"] = end.isoformat() if end else None
-            pause_temperature = (
-                self.coordinator.data.temperature_settings.get("pauseTemperature") or {}
-            ).get("setpoint")
-            if pause_temperature is not None:
-                attrs["pause_temperature"] = pause_temperature
+        data = self.coordinator.data
+        settings = data.temperature_settings
+        # For the pause and vacation card: each mode's state (active, planned
+        # or None), start and end, and the temperature the rooms then hold.
+        for mode_type, key in ((MODE_PAUSE, "pause"), (MODE_VACATION, "vacation")):
+            mode = next((m for m in data.modes if m.get("type") == mode_type), None)
+            if mode is None:
+                continue
+            state = mode_state(mode)
+            start_time = data.parse_time(mode, "startTime") if state else None
+            end_time = data.parse_time(mode, "endTime") if state else None
+            attrs[f"{key}_state"] = state
+            attrs[f"{key}_start"] = start_time.isoformat() if start_time else None
+            attrs[f"{key}_end"] = end_time.isoformat() if end_time else None
+            temperature = (settings.get(f"{key}Temperature") or {}).get("setpoint")
+            if temperature is not None:
+                attrs[f"{key}_temperature"] = temperature
         return attrs or None
-
-    def _active_mode(self, mode_type: str) -> dict[str, Any] | None:
-        return next(
-            (
-                mode
-                for mode in self.coordinator.data.modes
-                if mode.get("type") == mode_type and mode.get("state") == MODE_ACTIVE
-            ),
-            None,
-        )
 
     async def async_select_option(self, option: str) -> None:
         await self._async_switch(_TYPES.get(option))
 
-    async def async_pause(self, end: datetime | None) -> None:
-        """Pause heating until ``end``, or until resumed when it is None.
-
-        Pausing again while paused moves the end time.
-        """
+    def _require_pause(self) -> None:
         if not any(mode.get("type") == MODE_PAUSE for mode in self.coordinator.data.modes):
             raise ServiceValidationError(translation_domain=DOMAIN, translation_key="no_pause")
+
+    async def async_pause(self, start: datetime | None, end: datetime | None) -> None:
+        """Pause heating from ``start`` (None: now) until ``end`` (None: until resumed).
+
+        Pausing again while paused moves the end time. A pause with a start
+        time is planned, like a vacation: the CC starts it by itself.
+        """
+        self._require_pause()
+        data = self.coordinator.data
         content: dict[str, Any] = {"type": MODE_PAUSE, "state": MODE_ACTIVE}
+        if start is not None:
+            content["startTime"] = data.format_time(start)
         if end is not None:
-            content["endTime"] = format_cc_time(end, self.coordinator.data.info)
+            content["endTime"] = data.format_time(end)
+        if start is not None:
+            # Planned: leave the current mode alone until the pause starts.
+            await self.coordinator.async_write(
+                "PUT", f"/api/modes/{MODE_ENDPOINTS[MODE_PAUSE]}", content
+            )
+            return
         await self._async_switch(MODE_PAUSE, content, resend=True)
+
+    async def async_cancel_pause(self) -> None:
+        """End a running pause or cancel a planned one."""
+        self._require_pause()
+        await self.coordinator.async_write(
+            "PUT",
+            f"/api/modes/{MODE_ENDPOINTS[MODE_PAUSE]}",
+            {"type": MODE_PAUSE, "state": MODE_INACTIVE},
+        )
 
     async def _async_switch(
         self,

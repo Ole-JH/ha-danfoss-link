@@ -150,6 +150,9 @@
       "vacation_end": {
         "name": "Ferie slutter"
       },
+      "pause_start": {
+        "name": "Pause starter"
+      },
       "pause_end": {
         "name": "Pause slutter"
       }
@@ -217,8 +220,12 @@
     },
     "pause": {
       "name": "Sæt varmen på pause",
-      "description": "Sætter varmen på pause på CC'en: alle rum, også dem på Manuel, holder pausetemperaturen indtil sluttidspunktet, eller til du vælger en anden tilstand for huset. Pauser du igen under en pause, flyttes sluttidspunktet. Angiv en varighed eller et sluttidspunkt, eller ingen af dem for at holde pause, indtil du genoptager.",
+      "description": "Sætter varmen på pause på CC'en: alle rum, også dem på Manuel, holder pausetemperaturen indtil sluttidspunktet, eller til du vælger en anden tilstand for huset. Angiv en start for at planlægge pausen til senere; CC'en starter den selv. Angiv en varighed eller et sluttidspunkt, eller ingen af dem for at holde pause, indtil du genoptager. Pauser du igen under en pause, flyttes sluttidspunktet.",
       "fields": {
+        "start": {
+          "name": "Start",
+          "description": "Planlæg pausen til at starte senere. Udelad for at holde pause nu."
+        },
         "duration": {
           "name": "Varighed",
           "description": "Hvor længe pausen varer, f.eks. 2 timer."
@@ -228,6 +235,10 @@
           "description": "Hvornår pausen slutter, og CC'en igen følger ugeprogrammet."
         }
       }
+    },
+    "cancel_pause": {
+      "name": "Annullér pause",
+      "description": "Afslutter en igangværende pause eller annullerer en planlagt. CC'en følger derefter ugeprogrammet."
     }
   },
   "exceptions": {
@@ -254,6 +265,9 @@
     },
     "pause_end_in_past": {
       "message": "Pausen skal slutte i fremtiden."
+    },
+    "pause_end_before_start": {
+      "message": "Pausen skal slutte efter den starter."
     }
   },
   "selector": {

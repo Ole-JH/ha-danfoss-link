@@ -18,10 +18,10 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .cc_time import parse_cc_time
-from .const import MODE_ACTIVE, MODE_PAUSE, MODE_PLANNED, MODE_VACATION
+from .const import MODE_PAUSE, MODE_VACATION
 from .coordinator import DanfossLinkConfigEntry, DanfossLinkCoordinator
 from .entity import DanfossLinkEntity, DanfossLinkRoomEntity
+from .select import mode_state
 
 PARALLEL_UPDATES = 0
 
@@ -40,12 +40,11 @@ async def async_setup_entry(
     entities.append(DanfossLinkAlarms(coordinator))
     if coordinator.data.status.get("currentState"):
         entities.append(DanfossLinkHouseState(coordinator))
-    if any(mode.get("type") == MODE_VACATION for mode in coordinator.data.modes):
-        entities.extend(
-            DanfossLinkVacationTime(coordinator, key) for key in ("startTime", "endTime")
-        )
-    if any(mode.get("type") == MODE_PAUSE for mode in coordinator.data.modes):
-        entities.append(DanfossLinkPauseEnd(coordinator))
+    for mode_type in (MODE_VACATION, MODE_PAUSE):
+        if any(mode.get("type") == mode_type for mode in coordinator.data.modes):
+            entities.extend(
+                DanfossLinkModeTime(coordinator, mode_type, key) for key in ("startTime", "endTime")
+            )
     if "wifiSignalStrengthDb" in coordinator.data.info:
         entities.append(DanfossLinkWifiSignal(coordinator))
     async_add_entities(entities)
@@ -149,39 +148,24 @@ class DanfossLinkWifiSignal(DanfossLinkEntity, SensorEntity):
         return self.coordinator.data.info.get("wifiSignalStrengthDb")
 
 
-class DanfossLinkVacationTime(DanfossLinkEntity, SensorEntity):
-    """Start or end of a planned or running vacation; unknown when there is none."""
+class DanfossLinkModeTime(DanfossLinkEntity, SensorEntity):
+    """Start or end of a planned or running vacation or pause; unknown when there is none."""
 
     _attr_device_class = SensorDeviceClass.TIMESTAMP
 
-    def __init__(self, coordinator: DanfossLinkCoordinator, key: str) -> None:
+    def __init__(self, coordinator: DanfossLinkCoordinator, mode_type: str, key: str) -> None:
+        self._mode_type = mode_type
         self._key = key
-        self._attr_translation_key = "vacation_start" if key == "startTime" else "vacation_end"
+        # vacation_start, vacation_end, pause_start, pause_end
+        self._attr_translation_key = (
+            f"{mode_type.lower()}_{'start' if key == 'startTime' else 'end'}"
+        )
         super().__init__(coordinator, self._attr_translation_key)
 
     @property
     def native_value(self) -> datetime | None:
-        for mode in self.coordinator.data.modes:
-            if mode.get("type") == MODE_VACATION and mode.get("state") in (
-                MODE_ACTIVE,
-                MODE_PLANNED,
-            ):
-                return parse_cc_time(mode, self._key, self.coordinator.data.info)
-        return None
-
-
-class DanfossLinkPauseEnd(DanfossLinkEntity, SensorEntity):
-    """When a running pause ends; unknown when there is none or it runs until resumed."""
-
-    _attr_device_class = SensorDeviceClass.TIMESTAMP
-    _attr_translation_key = "pause_end"
-
-    def __init__(self, coordinator: DanfossLinkCoordinator) -> None:
-        super().__init__(coordinator, "pause_end")
-
-    @property
-    def native_value(self) -> datetime | None:
-        for mode in self.coordinator.data.modes:
-            if mode.get("type") == MODE_PAUSE and mode.get("state") == MODE_ACTIVE:
-                return parse_cc_time(mode, "endTime", self.coordinator.data.info)
+        data = self.coordinator.data
+        for mode in data.modes:
+            if mode.get("type") == self._mode_type and mode_state(mode):
+                return data.parse_time(mode, self._key)
         return None

@@ -15,6 +15,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .api import CannotConnect, DanfossLinkClient, DanfossLinkError, RequestError
+from .cc_time import clock_drift, format_cc_time, parse_cc_time
 from .const import DOMAIN, MODE_ACTIVE, MODE_AT_HOME, MODE_ENDPOINTS, MODE_INACTIVE
 
 _LOGGER = logging.getLogger(__name__)
@@ -49,6 +50,16 @@ class DanfossLinkData:
     onoffdevices: dict[int, dict[str, Any]] = field(default_factory=dict)
     alarms: list[dict[str, Any]] = field(default_factory=list)
     temperature_settings: dict[str, Any] = field(default_factory=dict)
+    # How far the CC's clock is ahead of Home Assistant's.
+    clock_drift: timedelta = timedelta(0)
+
+    def parse_time(self, mode: dict[str, Any], key: str) -> datetime | None:
+        """A mode's start or end time, on Home Assistant's clock."""
+        return parse_cc_time(mode, key, self.info, self.clock_drift)
+
+    def format_time(self, when: datetime) -> str:
+        """A time to send to the CC, on the CC's clock."""
+        return format_cc_time(when, self.info, self.clock_drift)
 
 
 type DanfossLinkConfigEntry = ConfigEntry[DanfossLinkCoordinator]
@@ -119,10 +130,12 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
     def _fetch(self) -> DanfossLinkData:
         client = self.client
         info = client.get("/api/system/info") or {}
+        drift = clock_drift(info, dt_util.utcnow())
         rooms = client.get("/api/rooms") or []
         data = DanfossLinkData(
             info=info,
             rooms={room["id"]: room for room in rooms if "id" in room},
+            clock_drift=drift,
         )
         self._add_schedules(data.rooms)
         for key, uri in OPTIONAL_ENDPOINTS.items():

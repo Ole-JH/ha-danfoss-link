@@ -7,8 +7,11 @@ release PR to `main` is merged.
 ## Unreleased
 
 ### New
-- **Pause heating** for a while: the `danfoss_link.pause` action pauses for a duration (e.g. 2 hours) or until a time, or until you resume, as the app's Pause does. Every room holds the pause temperature meanwhile. A new **Pause end** sensor and the house mode's `pause_end` / `pause_temperature` attributes show when it ends and how warm the rooms are kept.
-- **Pause card** for dashboards (`custom:danfoss-link-pause-card`), included with the integration: pause for 1, 2, 4 or 8 hours with one tap, until a time you pick, or until you resume; see how long is left, add an hour or resume the schedule.
+- **Pause heating** now or later: the `danfoss_link.pause` action pauses for a duration (e.g. 2 hours), until a time, or until you resume, as the app's Pause does, and can plan a pause to start later. `danfoss_link.cancel_pause` ends or cancels it. Every room holds the pause temperature meanwhile. New **Pause start** / **Pause end** sensors, and the house mode select shows pause and vacation state, times and temperatures as attributes.
+- **Pause & vacation card** for dashboards (`custom:danfoss-link-away-card`), included with the integration: pause for 1, 2, 4 or 8 hours with one tap or until you resume, plan a pause or a vacation, see what is planned and how long is left, change or cancel it. Pause or vacation can be hidden in the card settings.
+
+### Fixes
+- Pause and vacation times follow the CC's own clock. Danfoss controllers can run minutes fast (one ran 18 minutes ahead), which made a timed pause end early and vacation times show off by as much.
 
 ## 0.4.0
 

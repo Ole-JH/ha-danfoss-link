@@ -53,6 +53,10 @@ pause:
       integration: danfoss_link
       domain: select
   fields:
+    start:
+      required: false
+      selector:
+        datetime:
     duration:
       required: false
       example: "02:00:00"
@@ -62,3 +66,8 @@ pause:
       required: false
       selector:
         datetime:
+cancel_pause:
+  target:
+    entity:
+      integration: danfoss_link
+      domain: select

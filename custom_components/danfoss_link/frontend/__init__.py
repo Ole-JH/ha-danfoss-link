@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 _LOGGER = logging.getLogger(__name__)
 
 _FOLDER = Path(__file__).parent
-CARD_FILES = ("danfoss-link-schedule-card.js", "danfoss-link-pause-card.js")
+CARD_FILES = ("danfoss-link-schedule-card.js", "danfoss-link-away-card.js")
 URL_BASE = "/danfoss_link"
 CARD_URLS = tuple(f"{URL_BASE}/{name}" for name in CARD_FILES)
 
