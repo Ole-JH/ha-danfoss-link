@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.const import CONF_SCAN_INTERVAL, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryError
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 
 from .alarms import AlarmNotifier
@@ -19,6 +19,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import DanfossLinkConfigEntry, DanfossLinkCoordinator
+from .entity import controller_device_info
 from .services import async_setup_services
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -65,6 +66,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: DanfossLinkConfigEntry) 
         raise
 
     entry.runtime_data = coordinator
+    # Register the CC first so the room devices can name it as their parent.
+    coordinator.controller_device_id = (
+        dr.async_get(hass)
+        .async_get_or_create(config_entry_id=entry.entry_id, **controller_device_info(coordinator))
+        .id
+    )
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     if entry.options.get(CONF_ALARM_NOTIFICATIONS, True):
         notifier = AlarmNotifier(hass, coordinator)

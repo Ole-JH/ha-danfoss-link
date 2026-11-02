@@ -10,6 +10,10 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN, MANUFACTURER, ZONE_LIVING
 from .coordinator import DanfossLinkCoordinator
 
+# HA 2026.10 replaced `via_device` (identifier tuple) with `via_device_id`
+# (device registry id); `via_device` stops working in 2027.8.
+_HAS_VIA_DEVICE_ID = "via_device_id" in DeviceInfo.__annotations__
+
 
 def controller_device_info(coordinator: DanfossLinkCoordinator) -> DeviceInfo:
     info = coordinator.data.info
@@ -43,13 +47,18 @@ class DanfossLinkRoomEntity(CoordinatorEntity[DanfossLinkCoordinator]):
         super().__init__(coordinator)
         self.room_id = room_id
         self._attr_unique_id = f"{coordinator.peer_id}_room_{room_id}_{key}"
-        self._attr_device_info = DeviceInfo(
+        device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{coordinator.peer_id}_room_{room_id}")},
             name=self.room.get("name") or f"Room {room_id}",
             manufacturer=MANUFACTURER,
             model="Link room",
-            via_device=(DOMAIN, coordinator.peer_id),
         )
+        if _HAS_VIA_DEVICE_ID:
+            if coordinator.controller_device_id is not None:
+                device_info["via_device_id"] = coordinator.controller_device_id
+        else:
+            device_info["via_device"] = (DOMAIN, coordinator.peer_id)
+        self._attr_device_info = device_info
 
     @property
     def room(self) -> dict[str, Any]:
