@@ -38,6 +38,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.danfoss_link import coordinator as coordinator_module
 from custom_components.danfoss_link.api import (
     AppIdentity,
     DanfossLinkClient,
@@ -243,6 +244,8 @@ async def test_setup_creates_entities(hass: HomeAssistant, fake: FakeMDG) -> Non
     cc = next(d for d in devices if d.identifiers == {(DOMAIN, PEER_ID)})
     assert cc.sw_version == "4.2.1797"
     assert len(devices) == 3  # the CC and two rooms
+    for room in (d for d in devices if d.id != cc.id):
+        assert room.via_device_id == cc.id
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert entry.state is ConfigEntryState.NOT_LOADED
@@ -290,6 +293,34 @@ async def test_setup_retries_when_cc_offline(hass: HomeAssistant, fake: FakeMDG)
     entry.add_to_hass(hass)
     await hass.config_entries.async_setup(entry.entry_id)
     assert entry.state is ConfigEntryState.SETUP_RETRY
+
+
+async def test_short_relay_outage_keeps_entities_available(
+    hass: HomeAssistant, fake: FakeMDG
+) -> None:
+    entry = await _setup(hass)
+    coordinator = entry.runtime_data
+    start = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
+
+    fake.place_call_result = 1  # the CC dropped off the relay
+    fake.drop_connections()
+    with patch.object(coordinator_module.dt_util, "utcnow", return_value=start):
+        await coordinator.async_refresh()
+    assert hass.states.get("climate.living_room").state == HVACMode.AUTO
+    assert coordinator.update_interval == coordinator_module.OUTAGE_RETRY_INTERVAL
+
+    later = start + coordinator_module.OUTAGE_GRACE_PERIOD
+    with patch.object(coordinator_module.dt_util, "utcnow", return_value=later):
+        await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get("climate.living_room").state == "unavailable"
+    assert coordinator.update_interval.total_seconds() == 60
+
+    fake.place_call_result = 0
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get("climate.living_room").state == HVACMode.AUTO
+    assert coordinator.update_interval.total_seconds() == 60
 
 
 async def test_setup_with_broken_credentials(hass: HomeAssistant) -> None:

@@ -73,6 +73,13 @@ token } }` → open a new connection to a router and send
 `PleaseHold` / `GoAhead { selected_protocol }` / `RoutingError`. After
 `GoAhead` the stream is end-to-end with the CC.
 
+`place_call_reply` with `result = 1 PEER_NOT_AVAILABLE` means the CC is not
+connected to the grid at that moment. Users see this for about 2 minutes every
+1 to 6 hours with the CC next to its Wi-Fi access point (issue #5, firmware
+4.2.1797), so the CC seems to reconnect to the grid now and then. The
+integration keeps the last known state for up to 5 minutes and retries every
+15 seconds before marking entities unavailable.
+
 Remote pairing: `allocate_pairing_channel` / `place_pairing_call { pair_id }`
 on the control connection, then the PACE exchange below on the routed stream.
 
@@ -185,9 +192,13 @@ Alarms (APK 1.3.10 `GetAlarmsRequest`, `PatchAlarmRequest`, `GetAlarmsResponse`,
 - The integration shows each unread alarm as a Home Assistant persistent
   notification, using the app's English or Danish texts for `titleTextId` and
   `descriptionTextId` (`alarm_texts.py`). Dismissing it sends the PATCH above.
-- `GET api/system/info` carries `wifiSignalStrengthDb` (int, the CC's own
-  Wi-Fi), plus `uptime`, `cpuLoadPercentage`, `memoryLoadPercentage`,
-  `pingCallTime`, `autoUpdateSoftware`, `limitPauseDuration`, `systemTime`.
+- The app's response class for `GET api/system/info` has `wifiSignalStrengthDb`
+  (int, the CC's own Wi-Fi), `uptime`, `cpuLoadPercentage`,
+  `memoryLoadPercentage`, `pingCallTime`, `autoUpdateSoftware`,
+  `limitPauseDuration` and `systemTime`. A real CC on firmware 4.2.1797 returns
+  only `autoUpdateSoftware`, `brandingType`, `limitPauseDuration`, `name`,
+  `serialNo`, `systemTime`, `uptime` and `version` (issue #4), so the Wi-Fi,
+  CPU, memory and ping fields are optional and may never appear.
 - Strings `batteryLevel` and `signal` in the dex belong to bundled Google
   libraries, not to the CC API.
 

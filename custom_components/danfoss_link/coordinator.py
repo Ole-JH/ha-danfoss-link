@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 import logging
 from typing import Any
 
@@ -12,11 +12,18 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import CannotConnect, DanfossLinkClient, DanfossLinkError, RequestError
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+# The CC drops off the Danfoss relay for a minute or two every few hours
+# (PEER_NOT_AVAILABLE). Keep showing the last known state for this long, and
+# poll more often meanwhile, before marking the entities unavailable.
+OUTAGE_GRACE_PERIOD = timedelta(minutes=5)
+OUTAGE_RETRY_INTERVAL = timedelta(seconds=15)
 
 # Endpoints that may legitimately be missing on some firmware versions.
 OPTIONAL_ENDPOINTS = {
@@ -63,8 +70,12 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
             name=DOMAIN,
             update_interval=timedelta(seconds=scan_interval),
         )
+        self._normal_interval = timedelta(seconds=scan_interval)
+        self._outage_started: datetime | None = None
         self.client = client
         self.peer_id = client.identity.peer_id
+        # Device registry id of the CC, set at setup so rooms can link to it.
+        self.controller_device_id: str | None = None
         self._lock = asyncio.Lock()
 
     async def _call(self, func: Any, *args: Any) -> Any:
@@ -73,9 +84,31 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
 
     async def _async_update_data(self) -> DanfossLinkData:
         try:
-            return await self._call(self._fetch)
+            data = await self._call(self._fetch)
+        except CannotConnect as err:
+            return self._handle_outage(err)
         except DanfossLinkError as err:
             raise UpdateFailed(f"Error talking to the Danfoss Link CC: {err}") from err
+        if self._outage_started is not None:
+            _LOGGER.info(
+                "Danfoss Link CC is reachable again after %s",
+                dt_util.utcnow() - self._outage_started,
+            )
+            self._outage_started = None
+            self.update_interval = self._normal_interval
+        return data
+
+    def _handle_outage(self, err: CannotConnect) -> DanfossLinkData:
+        """Ride out a short outage on the last known data, or give up."""
+        now = dt_util.utcnow()
+        if self._outage_started is None:
+            self._outage_started = now
+        if self.data is None or now - self._outage_started >= OUTAGE_GRACE_PERIOD:
+            self.update_interval = self._normal_interval
+            raise UpdateFailed(f"Error talking to the Danfoss Link CC: {err}") from err
+        _LOGGER.debug("Danfoss Link CC not reachable, keeping last known state: %s", err)
+        self.update_interval = min(OUTAGE_RETRY_INTERVAL, self._normal_interval)
+        return self.data
 
     def _fetch(self) -> DanfossLinkData:
         client = self.client

@@ -60,7 +60,7 @@ up, and [Troubleshooting](#troubleshooting) if a step fails.
 | `binary_sensor` living zone | room | On when the room is in the living zone. Its rooms share one Schedule/Manual mode and one schedule, so changing one changes all. |
 | `binary_sensor` battery | room | Low battery on a device in the room, from the CC's alarms. *Disabled by default.* |
 | `binary_sensor` radio connection | room | Off when the CC has lost contact with a device in the room. *Disabled by default.* |
-| `sensor` Wi-Fi signal | CC | The CC's Wi-Fi signal strength. *Disabled by default.* |
+| `sensor` Wi-Fi signal | CC | The CC's Wi-Fi signal strength. *Disabled by default.* Only created if the CC reports it; firmware 4.2.1797 does not. |
 
 ### Planned vacation
 
@@ -100,7 +100,7 @@ How the integration compares with the Danfoss Link app (1.3.x).
 | On/off devices | ✅ | Switch entities |
 | Alarms (low battery, lost device, ...) | ✅ | A notification per unread alarm, unread alarms sensor, battery and radio connection binary sensors |
 | Mark alarms as read | ✅ | Dismiss the notification, or press the Mark alarms as read button. Notifications can be turned off in the integration's options |
-| CC Wi-Fi signal | ✅ | Diagnostic sensor |
+| CC Wi-Fi signal | ⚠️ | Diagnostic sensor, only on CCs that report it (not firmware 4.2.1797) |
 | Pair a new app with a CC code | ✅ | Config flow (cloud pairing codes only) |
 | Weekly schedules (rooms, living zone) | ❌ | Not yet; the CC's API supports it |
 | Schedules for on/off devices | ❌ | Not yet |
