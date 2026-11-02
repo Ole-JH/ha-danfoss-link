@@ -149,6 +149,9 @@
       },
       "vacation_end": {
         "name": "Vacation end"
+      },
+      "pause_end": {
+        "name": "Pause end"
       }
     },
     "binary_sensor": {
@@ -211,6 +214,20 @@
           "description": "Periods as HH:MM-HH:MM in 15-minute steps, e.g. 06:00-08:00. Use 24:00 for midnight at the end of the day. Leave empty for away all day."
         }
       }
+    },
+    "pause": {
+      "name": "Pause heating",
+      "description": "Pauses heating on the CC: every room, Manual ones too, holds the pause temperature until the end time or until you choose another house mode. Pausing again while paused moves the end time. Give a duration or an end, or neither to pause until resumed.",
+      "fields": {
+        "duration": {
+          "name": "Duration",
+          "description": "How long to pause, e.g. 2 hours."
+        },
+        "end": {
+          "name": "End",
+          "description": "When the pause ends and the CC follows its weekly schedule again."
+        }
+      }
     }
   },
   "exceptions": {
@@ -228,6 +245,15 @@
     },
     "invalid_period": {
       "message": "\"{period}\" is not a valid period. Use HH:MM-HH:MM in 15-minute steps, e.g. 06:00-08:00."
+    },
+    "no_pause": {
+      "message": "This CC has no pause mode."
+    },
+    "not_house_mode": {
+      "message": "Choose the Danfoss Link house mode entity."
+    },
+    "pause_end_in_past": {
+      "message": "The pause must end in the future."
     }
   },
   "selector": {

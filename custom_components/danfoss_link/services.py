@@ -1,10 +1,11 @@
-"""Actions: plan and cancel a vacation (as in the app's vacation calendar), set schedules."""
+"""Actions: plan and cancel a vacation (as in the app's vacation calendar), pause, set schedules."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
 from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
+from homeassistant.components.select import DOMAIN as SELECT_DOMAIN
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ServiceValidationError
@@ -24,6 +25,8 @@ ATTR_END = "end"
 SERVICE_PLAN_VACATION = "plan_vacation"
 SERVICE_CANCEL_VACATION = "cancel_vacation"
 SERVICE_SET_SCHEDULE = "set_schedule"
+SERVICE_PAUSE = "pause"
+ATTR_DURATION = "duration"
 ATTR_DAYS = "days"
 ATTR_AT_HOME = "at_home"
 
@@ -40,6 +43,10 @@ SET_SCHEDULE_SCHEMA = {
     vol.Required(ATTR_DAYS): vol.All(cv.ensure_list, [vol.In(WEEKDAYS)], vol.Length(min=1)),
     # Empty (or left out): away all day.
     vol.Optional(ATTR_AT_HOME, default=list): vol.All(cv.ensure_list, [cv.string]),
+}
+PAUSE_SCHEMA = {
+    vol.Exclusive(ATTR_DURATION, "pause_end"): cv.positive_time_period,
+    vol.Exclusive(ATTR_END, "pause_end"): cv.datetime,
 }
 
 
@@ -115,6 +122,25 @@ async def _set_schedule(entity, call: ServiceCall) -> None:
     await entity.async_set_schedule(days, periods)
 
 
+async def _pause(entity, call: ServiceCall) -> None:
+    # Only the house mode select can pause; the action targets it so the card
+    # and automations name the CC by its entity.
+    if not hasattr(entity, "async_pause"):
+        raise ServiceValidationError(translation_domain=DOMAIN, translation_key="not_house_mode")
+    end: datetime | None = None
+    if ATTR_DURATION in call.data:
+        end = dt_util.now() + call.data[ATTR_DURATION]
+    elif ATTR_END in call.data:
+        end = _aware(call.data[ATTR_END])
+        if end <= dt_util.now():
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="pause_end_in_past"
+            )
+    if end is not None:
+        end = end.replace(second=0, microsecond=0)
+    await entity.async_pause(end)
+
+
 def async_setup_services(hass: HomeAssistant) -> None:
     service.async_register_platform_entity_service(
         hass,
@@ -123,6 +149,14 @@ def async_setup_services(hass: HomeAssistant) -> None:
         entity_domain=CLIMATE_DOMAIN,
         func=_set_schedule,
         schema=SET_SCHEDULE_SCHEMA,
+    )
+    service.async_register_platform_entity_service(
+        hass,
+        DOMAIN,
+        SERVICE_PAUSE,
+        entity_domain=SELECT_DOMAIN,
+        func=_pause,
+        schema=PAUSE_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN, SERVICE_PLAN_VACATION, _plan_vacation, schema=PLAN_VACATION_SCHEMA

@@ -9,6 +9,7 @@
 | `select` house mode | CC | Schedule (no override) / At home / Vacation / Pause (/ Boost if your CC has it) |
 | `sensor` house state | CC | What the CC is doing now: at home / away / asleep from the schedule, or the active mode |
 | `number` vacation temperature | CC | Temperature used in vacation mode |
+| `sensor` pause end | CC | When a running pause ends; unknown when there is no pause or it runs until you resume |
 | `sensor` vacation start / end | CC | When a planned or running vacation starts and ends; unknown when none is planned |
 | `switch` | on/off device | Link on/off outputs; unavailable while the CC reports "no response from unit" for them |
 | `sensor` unread alarms | CC | Count plus details (low battery, lost device, ...) |
@@ -77,6 +78,44 @@ entities:
   - climate.bathroom
 ```
 
+### Pausing the heating
+
+Pause, as in the app, sets every room (Manual ones too) to the CC's pause
+temperature (6 °C by default) until the pause ends, then the CC follows its
+weekly schedule again. A pause replaces *At home* and *Vacation*.
+
+- **House mode → Pause** pauses until you pick another house mode.
+- The `danfoss_link.pause` action targets the house mode select and takes a
+  `duration` or an `end`, or neither to pause until resumed. Pausing again
+  while paused moves the end. Resume by selecting **Schedule** (or another
+  house mode).
+- The house mode select has `pause_end` and `pause_temperature` attributes,
+  and the **Pause end** sensor holds the end time for automations.
+
+```yaml
+action: danfoss_link.pause
+target:
+  entity_id: select.my_home_house_mode
+data:
+  duration: "02:00:00"
+```
+
+### Pause card
+
+A second dashboard card, **Danfoss Link pause**, comes with the integration.
+It shows whether the heating is paused, until when and how long is left, and
+the pause temperature. Pause for 1, 2, 4 or 8 hours with one tap, until a
+time you pick, or until you resume; while paused, add an hour, change the end
+or resume the schedule.
+
+```yaml
+type: custom:danfoss-link-pause-card
+# Optional; leave out for the (first) Danfoss Link house mode.
+entity: select.my_home_house_mode
+# Optional quick choices, in hours.
+durations: [1, 2, 4, 8]
+```
+
 Diagnostic entities marked *disabled by default* can be turned on under the
 device's entity list in Home Assistant.
 
@@ -95,6 +134,7 @@ How the integration compares with the Danfoss Link app (1.3.x).
 | At-home / away temperatures | ✅ | Number entities per room |
 | Living zone (shared mode for its rooms) | ✅ | Mode changes are sent to the whole zone |
 | House modes: at home, vacation, pause, boost | ✅ | House mode select and house state sensor |
+| Pause with an end time | ✅ | `pause` action and the pause card |
 | Vacation temperature | ✅ | Number entity |
 | Planned vacation with dates | ✅ | `plan_vacation` / `cancel_vacation` actions |
 | On/off devices | ✅ | Switch entities |
@@ -104,7 +144,6 @@ How the integration compares with the Danfoss Link app (1.3.x).
 | Pair a new app with a CC code | ✅ | Config flow (cloud pairing codes only) |
 | Weekly schedules (rooms, living zone) | ✅ | Shown as thermostat attributes, changed with the `set_schedule` action |
 | Schedules for on/off devices | ❌ | Not yet |
-| Pause with an end time | ❌ | Pause can only be switched on and off |
 | Outdoor temperature | ❌ | Not yet |
 | Pause temperature, floor heating limit | ❌ | The app only reads these; not planned |
 | Firmware update | ❌ | Not planned: a failed update could leave the CC unreachable |

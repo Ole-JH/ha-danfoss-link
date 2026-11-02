@@ -341,10 +341,27 @@ PUT api/modes/vacation <- {"type": "Vacation", "state": "Inactive"}   (cancel / 
   with a `Z` suffix and read from `startTimeUtc` / `endTimeUtc`; if it ends in
   an offset (`+02:00`), they are CC local time sent without a suffix and read
   from `startTime` / `endTime`. Values outside 1970-2099 mean "no date".
-- Pause takes an optional `endTime` the same way (`S.k.m()`), not used here.
+- Pause takes an optional `endTime` the same way (`S.k.m()`):
+
+  ```
+  PUT api/modes/pause <- {"type": "Pause", "state": "Active"}                 (until resumed)
+  PUT api/modes/pause <- {"type": "Pause", "state": "Active", "endTime": T}   (until T)
+  PUT api/modes/pause <- {"type": "Pause", "state": "Inactive"}               (resume)
+  ```
+
+  The app's pause dialog ("Pause Heating?") has a `pause.activate_1hour_button`
+  ("1 Hour") next to the plain Pause; ending it is "End pause mode and switch
+  to scheduled heating". `api/system/info` has a boolean `limitPauseDuration`
+  (false on Ole's CC); by its name the CC then limits how long a pause may
+  last, which is probably why the app offers the 1-hour pause (inferred from
+  the strings, the code was not decompiled). The rooms hold
+  `api/settings/temperature` `pauseTemperature.setpoint` (min 4, max 10,
+  6 on Ole's CC); the app only reads it.
 
 The integration exposes this as the `danfoss_link.plan_vacation` and
-`danfoss_link.cancel_vacation` actions plus Vacation start/end sensors.
+`danfoss_link.cancel_vacation` actions plus Vacation start/end sensors, and
+pause as the `danfoss_link.pause` action (duration or end time), a Pause end
+sensor and the bundled pause card.
 
 Live test on Ole's CC (2026-11-02, firmware 4.2.1724, integration 0.3.1), via
 Home Assistant, every change put back afterwards:

@@ -37,6 +37,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+import voluptuous as vol
 
 from custom_components.danfoss_link import coordinator as coordinator_module
 from custom_components.danfoss_link.api import (
@@ -741,6 +742,153 @@ async def test_plan_vacation_cc_local_time(hass: HomeAssistant, fake: FakeMDG) -
     assert hass.states.get("sensor.my_home_vacation_start").state == "2030-07-01T10:00:00+00:00"
 
 
+def _mode_writes(fake: FakeMDG) -> list:
+    return [r for r in fake.requests if r[0] == "PUT" and r[1].startswith("/api/modes/")]
+
+
+async def test_pause_for_a_while(hass: HomeAssistant, fake: FakeMDG, freezer) -> None:
+    freezer.move_to("2030-07-01T12:00:20+00:00")
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    assert hass.states.get(house).attributes["pause_end"] is None
+    assert hass.states.get(house).attributes["pause_temperature"] == 6.0
+    assert hass.states.get("sensor.my_home_pause_end").state == "unknown"
+
+    await hass.services.async_call(
+        DOMAIN, "pause", {"duration": {"hours": 2}}, target={ATTR_ENTITY_ID: house}, blocking=True
+    )
+    assert _mode_writes(fake) == [
+        (
+            "PUT",
+            "/api/modes/pause",
+            {"type": "Pause", "state": "Active", "endTime": "2030-07-01T14:00:00Z"},
+        )
+    ]
+    await hass.async_block_till_done()
+    state = hass.states.get(house)
+    assert state.state == "pause"
+    assert state.attributes["pause_end"] == "2030-07-01T14:00:00+00:00"
+    assert hass.states.get("sensor.my_home_pause_end").state == "2030-07-01T14:00:00+00:00"
+
+    # Pausing again while paused only moves the end.
+    fake.requests.clear()
+    await hass.services.async_call(
+        DOMAIN,
+        "pause",
+        {"end": "2030-07-01T16:30:00+00:00"},
+        target={ATTR_ENTITY_ID: house},
+        blocking=True,
+    )
+    assert _mode_writes(fake) == [
+        (
+            "PUT",
+            "/api/modes/pause",
+            {"type": "Pause", "state": "Active", "endTime": "2030-07-01T16:30:00Z"},
+        )
+    ]
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["pause_end"] == "2030-07-01T16:30:00+00:00"
+
+    # Resuming is going back to the schedule.
+    fake.requests.clear()
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: house, "option": "schedule"},
+        blocking=True,
+    )  # fmt: skip
+    assert _mode_writes(fake) == [
+        ("PUT", "/api/modes/pause", {"type": "Pause", "state": "Inactive"})
+    ]
+    await hass.async_block_till_done()
+    assert hass.states.get(house).state == "schedule"
+    assert hass.states.get(house).attributes["pause_end"] is None
+    assert hass.states.get("sensor.my_home_pause_end").state == "unknown"
+
+
+async def test_pause_until_resumed(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: house, "option": "vacation"},
+        blocking=True,
+    )  # fmt: skip
+    fake.requests.clear()
+    await hass.services.async_call(
+        DOMAIN, "pause", {}, target={ATTR_ENTITY_ID: house}, blocking=True
+    )
+    # Another temporary mode is ended first; no end time means until resumed.
+    assert _mode_writes(fake) == [
+        ("PUT", "/api/modes/vacation", {"type": "Vacation", "state": "Inactive"}),
+        ("PUT", "/api/modes/pause", {"type": "Pause", "state": "Active"}),
+    ]
+    await hass.async_block_till_done()
+    assert hass.states.get(house).state == "pause"
+    assert hass.states.get(house).attributes["pause_end"] is None
+
+
+async def test_pause_replaces_at_home(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: house, "option": "at_home"},
+        blocking=True,
+    )  # fmt: skip
+    fake.requests.clear()
+    await hass.services.async_call(
+        DOMAIN, "pause", {"duration": "00:30:00"}, target={ATTR_ENTITY_ID: house}, blocking=True
+    )
+    # The CC ends AtHome by itself when a pause starts (seen live).
+    writes = _mode_writes(fake)
+    assert [w[1] for w in writes] == ["/api/modes/pause"]
+    assert "endTime" in writes[0][2]
+
+
+async def test_pause_cc_local_time(hass: HomeAssistant, fake: FakeMDG) -> None:
+    fake.state["/api/system/info"]["systemTime"] = "2026-10-16T07:00:00+01:00"
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        DOMAIN,
+        "pause",
+        {"end": "2030-01-05T10:00:00+00:00"},
+        target={ATTR_ENTITY_ID: house},
+        blocking=True,
+    )
+    assert _mode_writes(fake)[0][2]["endTime"] == "2030-01-05T11:00:00"
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["pause_end"] == "2030-01-05T11:00:00+01:00"
+
+
+@pytest.mark.parametrize(
+    ("entity", "data", "error"),
+    [
+        ("select.my_home_house_mode", {"end": "2020-01-01 12:00:00"}, "pause_end_in_past"),
+        ("select.living_room_mode", {}, "not_house_mode"),
+    ],
+)
+async def test_pause_invalid(
+    hass: HomeAssistant, fake: FakeMDG, entity: str, data: dict, error: str
+) -> None:
+    await _setup(hass)
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            DOMAIN, "pause", data, target={ATTR_ENTITY_ID: entity}, blocking=True
+        )
+    assert err.value.translation_key == error
+    assert _mode_writes(fake) == []
+
+
+async def test_pause_duration_and_end_exclusive(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            "pause",
+            {"duration": "01:00:00", "end": "2030-01-01 12:00:00"},
+            target={ATTR_ENTITY_ID: "select.my_home_house_mode"},
+            blocking=True,
+        )
+
+
 @pytest.mark.parametrize(
     ("start", "end", "error"),
     [
@@ -959,17 +1107,25 @@ async def test_set_schedule_invalid_period(hass: HomeAssistant, fake: FakeMDG) -
     assert _schedule_writes(fake) == []
 
 
-async def test_schedule_card_registered(hass: HomeAssistant) -> None:
+async def test_cards_registered(hass: HomeAssistant) -> None:
     from unittest.mock import AsyncMock, MagicMock  # noqa: PLC0415
 
-    from custom_components.danfoss_link.frontend import CARD_URL, async_register_card  # noqa: PLC0415
+    from custom_components.danfoss_link.frontend import (  # noqa: PLC0415
+        CARD_URLS,
+        async_register_card,
+    )
 
+    assert CARD_URLS == (
+        "/danfoss_link/danfoss-link-schedule-card.js",
+        "/danfoss_link/danfoss-link-pause-card.js",
+    )
     hass.http = MagicMock(async_register_static_paths=AsyncMock())
     with patch("homeassistant.components.frontend.add_extra_js_url") as add_js:
         await async_register_card(hass)
     (paths,) = hass.http.async_register_static_paths.call_args.args
-    assert paths[0].url_path == CARD_URL
-    assert add_js.call_args.args[1].startswith(f"{CARD_URL}?v=")
+    assert [path.url_path for path in paths] == list(CARD_URLS)
+    loaded = [call.args[1] for call in add_js.call_args_list]
+    assert [url.split("?v=")[0] for url in loaded] == list(CARD_URLS)
 
 
 async def test_set_schedule_falls_back_to_one_day_per_patch(

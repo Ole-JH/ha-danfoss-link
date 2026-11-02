@@ -60,6 +60,7 @@ it in an area.
 | `select` house mode | CC | Schedule (no override) / At home / Vacation / Pause (/ Boost if your CC has it) |
 | `sensor` house state | CC | What the CC is doing now: at home / away / asleep from the schedule, or the active mode |
 | `number` vacation temperature | CC | Temperature used in vacation mode |
+| `sensor` pause end | CC | When a running pause ends; unknown when there is no pause or it runs until you resume |
 | `sensor` vacation start / end | CC | When a planned or running vacation starts and ends; unknown when none is planned |
 | `switch` | on/off device | Link on/off outputs; unavailable while the CC reports "no response from unit" for them |
 | `sensor` unread alarms | CC | Count plus details (low battery, lost device, ...) |
@@ -73,8 +74,9 @@ Entities marked *disabled by default* can be turned on in the device's entity li
 Home Assistant reads the CC every 60 seconds (configurable down to 20) and sends
 changes right away. Your phone app keeps working alongside it.
 
-Actions for planned vacations and weekly schedules, the feature comparison with the
-app and how the modes behave are in [docs/features.md](docs/features.md).
+Actions for planned vacations, pausing and weekly schedules, the bundled schedule and
+pause dashboard cards, the feature comparison with the app and how the modes behave
+are in [docs/features.md](docs/features.md).
 
 ## How it works
 

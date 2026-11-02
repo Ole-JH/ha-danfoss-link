@@ -47,3 +47,18 @@ set_schedule:
       selector:
         text:
           multiple: true
+pause:
+  target:
+    entity:
+      integration: danfoss_link
+      domain: select
+  fields:
+    duration:
+      required: false
+      example: "02:00:00"
+      selector:
+        duration:
+    end:
+      required: false
+      selector:
+        datetime:

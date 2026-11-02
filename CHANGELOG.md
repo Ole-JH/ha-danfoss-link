@@ -4,6 +4,12 @@ Each release's GitHub release notes are taken from its section below. Add a
 `## <version>` section matching the version in `manifest.json` before the
 release PR to `main` is merged.
 
+## Unreleased
+
+### New
+- **Pause heating** for a while: the `danfoss_link.pause` action pauses for a duration (e.g. 2 hours) or until a time, or until you resume, as the app's Pause does. Every room holds the pause temperature meanwhile. A new **Pause end** sensor and the house mode's `pause_end` / `pause_temperature` attributes show when it ends and how warm the rooms are kept.
+- **Pause card** for dashboards (`custom:danfoss-link-pause-card`), included with the integration: pause for 1, 2, 4 or 8 hours with one tap, until a time you pick, or until you resume; see how long is left, add an hour or resume the schedule.
+
 ## 0.4.0
 
 ### New

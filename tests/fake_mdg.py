@@ -149,7 +149,8 @@ def initial_state() -> dict[str, Any]:
              "titleTextId": "IDS_UA1_ALERTVIEWER_BATTERY_LOW_ALERT",
              "createdDate": "2026-10-01T10:00:00"},
         ],
-        "/api/settings/temperature": {"vacationTemperature": {"setpoint": 15.0}},
+        "/api/settings/temperature": {"vacationTemperature": {"setpoint": 15.0},
+                                       "pauseTemperature": {"setpoint": 6.0}},
     }  # fmt: skip
 
 

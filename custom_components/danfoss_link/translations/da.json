@@ -149,6 +149,9 @@
       },
       "vacation_end": {
         "name": "Ferie slutter"
+      },
+      "pause_end": {
+        "name": "Pause slutter"
       }
     },
     "binary_sensor": {
@@ -211,6 +214,20 @@
           "description": "Perioder som TT:MM-TT:MM i kvarterer, f.eks. 06:00-08:00. Brug 24:00 for midnat sidst på dagen. Lad feltet være tomt for ude hele dagen."
         }
       }
+    },
+    "pause": {
+      "name": "Sæt varmen på pause",
+      "description": "Sætter varmen på pause på CC'en: alle rum, også dem på Manuel, holder pausetemperaturen indtil sluttidspunktet, eller til du vælger en anden tilstand for huset. Pauser du igen under en pause, flyttes sluttidspunktet. Angiv en varighed eller et sluttidspunkt, eller ingen af dem for at holde pause, indtil du genoptager.",
+      "fields": {
+        "duration": {
+          "name": "Varighed",
+          "description": "Hvor længe pausen varer, f.eks. 2 timer."
+        },
+        "end": {
+          "name": "Slut",
+          "description": "Hvornår pausen slutter, og CC'en igen følger ugeprogrammet."
+        }
+      }
     }
   },
   "exceptions": {
@@ -228,6 +245,15 @@
     },
     "invalid_period": {
       "message": "\"{period}\" er ikke en gyldig periode. Brug TT:MM-TT:MM i kvarterer, f.eks. 06:00-08:00."
+    },
+    "no_pause": {
+      "message": "Denne CC har ingen pausetilstand."
+    },
+    "not_house_mode": {
+      "message": "Vælg Danfoss Link-enheden for husets tilstand."
+    },
+    "pause_end_in_past": {
+      "message": "Pausen skal slutte i fremtiden."
     }
   },
   "selector": {
