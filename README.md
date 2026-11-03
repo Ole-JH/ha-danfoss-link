@@ -106,8 +106,7 @@ change or cancel a plan, add an hour to a pause or end it early.
 type: custom:danfoss-link-away-card
 ```
 
-There is also a **living zone** card. All the card options are in
-[docs/features.md](docs/features.md#schedule-card).
+All the card options are in [docs/features.md](docs/features.md#schedule-card).
 
 ## How it works
 
