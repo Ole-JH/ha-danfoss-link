@@ -16,11 +16,13 @@ from homeassistant.const import (
     UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import MODE_PAUSE, MODE_VACATION
+from .const import DOMAIN, MODE_PAUSE, MODE_VACATION, REGULATION_MANUAL, REGULATION_SCHEDULE
 from .coordinator import DanfossLinkConfigEntry, DanfossLinkCoordinator
 from .entity import DanfossLinkEntity, DanfossLinkRoomEntity
+from .schedule import schedule_attributes
 
 PARALLEL_UPDATES = 0
 
@@ -44,6 +46,8 @@ async def async_setup_entry(
             entities.extend(
                 DanfossLinkModeTime(coordinator, mode_type, key) for key in ("startTime", "endTime")
             )
+    if any("zone" in room for room in coordinator.data.rooms.values()):
+        entities.append(DanfossLinkLivingZone(coordinator))
     if "wifiSignalStrengthDb" in coordinator.data.info:
         entities.append(DanfossLinkWifiSignal(coordinator))
     async_add_entities(entities)
@@ -165,3 +169,41 @@ class DanfossLinkModeTime(DanfossLinkEntity, SensorEntity):
     def native_value(self) -> datetime | None:
         _, start, end = self.coordinator.mode_info(self._mode_type)
         return start if self._key == "startTime" else end
+
+
+class DanfossLinkLivingZone(DanfossLinkEntity, SensorEntity):
+    """Number of rooms in the living zone; the rooms, mode and schedule as attributes.
+
+    The living zone's rooms share one Schedule/Manual setting and one weekly
+    schedule. Rooms join or leave with the join/leave_living_zone actions.
+    """
+
+    _attr_translation_key = "living_zone"
+
+    def __init__(self, coordinator: DanfossLinkCoordinator) -> None:
+        super().__init__(coordinator, "living_zone")
+
+    @property
+    def native_value(self) -> int:
+        return len(self.coordinator.living_zone_rooms())
+
+    def _climate_entity_id(self, room_id: int) -> str | None:
+        return er.async_get(self.hass).async_get_entity_id(
+            "climate", DOMAIN, f"{self.coordinator.peer_id}_room_{room_id}_climate"
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        rooms = self.coordinator.data.rooms
+        members = self.coordinator.living_zone_rooms()
+        others = [room_id for room_id in rooms if room_id not in members]
+        first = rooms[members[0]] if members else {}
+        regulation = (first.get("regulation") or {}).get("type")
+        return {
+            "rooms": [rooms[room_id].get("name") for room_id in members],
+            "entity_id": [self._climate_entity_id(room_id) for room_id in members],
+            "other_entity_id": [self._climate_entity_id(room_id) for room_id in others],
+            # The climate entities' hvac mode: auto follows the schedule.
+            "hvac_mode": {REGULATION_SCHEDULE: "auto", REGULATION_MANUAL: "heat"}.get(regulation),
+            **schedule_attributes(first, self.coordinator.data.info),
+        }

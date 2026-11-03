@@ -1,4 +1,5 @@
-"""Actions: plan and cancel a vacation (as in the app's vacation calendar), pause, set schedules."""
+"""Actions: plan and cancel a vacation (as in the app's vacation calendar), pause, set schedules,
+and move rooms into or out of the living zone."""
 
 from __future__ import annotations
 
@@ -26,6 +27,8 @@ SERVICE_CANCEL_VACATION = "cancel_vacation"
 SERVICE_SET_SCHEDULE = "set_schedule"
 SERVICE_PAUSE = "pause"
 SERVICE_CANCEL_PAUSE = "cancel_pause"
+SERVICE_JOIN_LIVING_ZONE = "join_living_zone"
+SERVICE_LEAVE_LIVING_ZONE = "leave_living_zone"
 ATTR_DURATION = "duration"
 ATTR_DAYS = "days"
 ATTR_AT_HOME = "at_home"
@@ -161,7 +164,22 @@ async def _cancel_pause(entity, call: ServiceCall) -> None:
     await _house_mode(entity).async_cancel_pause()
 
 
+async def _join_living_zone(entity, call: ServiceCall) -> None:
+    await entity.async_set_living_zone(True)
+
+
+async def _leave_living_zone(entity, call: ServiceCall) -> None:
+    await entity.async_set_living_zone(False)
+
+
 def async_setup_services(hass: HomeAssistant) -> None:
+    for name, func in (
+        (SERVICE_JOIN_LIVING_ZONE, _join_living_zone),
+        (SERVICE_LEAVE_LIVING_ZONE, _leave_living_zone),
+    ):
+        service.async_register_platform_entity_service(
+            hass, DOMAIN, name, entity_domain=CLIMATE_DOMAIN, func=func, schema={}
+        )
     service.async_register_platform_entity_service(
         hass,
         DOMAIN,

@@ -11,6 +11,9 @@
       },
       "pause_start": {
         "default": "mdi:timer-pause-outline"
+      },
+      "living_zone": {
+        "default": "mdi:sofa"
       }
     }
   },
@@ -26,6 +29,12 @@
     },
     "cancel_pause": {
       "service": "mdi:play-circle-outline"
+    },
+    "join_living_zone": {
+      "service": "mdi:home-plus"
+    },
+    "leave_living_zone": {
+      "service": "mdi:home-minus"
     }
   }
 }

@@ -155,6 +155,10 @@
       },
       "pause_end": {
         "name": "Pause end"
+      },
+      "living_zone": {
+        "name": "Living zone",
+        "unit_of_measurement": "rooms"
       }
     },
     "binary_sensor": {
@@ -239,6 +243,14 @@
     "cancel_pause": {
       "name": "Cancel pause",
       "description": "Ends a running pause, or cancels a planned one. The CC then follows its weekly schedule."
+    },
+    "join_living_zone": {
+      "name": "Join living zone",
+      "description": "Moves the rooms into the living zone. They then share the zone's Schedule/Manual setting and weekly schedule; their own comfort and away temperatures stay."
+    },
+    "leave_living_zone": {
+      "name": "Leave living zone",
+      "description": "Takes the rooms out of the living zone, so each has its own Schedule/Manual setting and weekly schedule again. The last room cannot leave."
     }
   },
   "exceptions": {
@@ -268,6 +280,12 @@
     },
     "pause_end_before_start": {
       "message": "The pause must end after it starts."
+    },
+    "living_zone_unchanged": {
+      "message": "The Danfoss Link CC did not move {room} into or out of the living zone. Change it on the CC's display instead."
+    },
+    "living_zone_last_room": {
+      "message": "The living zone needs at least one room."
     }
   },
   "selector": {

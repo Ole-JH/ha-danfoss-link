@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -72,16 +73,24 @@ class DanfossLinkRoomEntity(CoordinatorEntity[DanfossLinkCoordinator]):
     def room_uri(self) -> str:
         return f"/api/rooms/{self.room_id}"
 
+    async def async_set_living_zone(self, member: bool) -> None:
+        """Move this room into or out of the living zone."""
+        coordinator = self.coordinator
+        if member == (self.room.get("zone") == ZONE_LIVING):
+            return
+        if not member and coordinator.living_zone_rooms() == [self.room_id]:
+            # The app needs a living zone with rooms; keep at least one.
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="living_zone_last_room"
+            )
+        await coordinator.async_set_living_zone(self.room_id, member)
+
     async def async_set_regulation_type(self, regulation_type: str) -> None:
         """Switch between Schedule and Manual; living-zone rooms switch as a zone."""
         coordinator = self.coordinator
         if self.room.get("zone") == ZONE_LIVING:
             # The CC rejects this on a single living-zone room (HTTP 400).
-            rooms = [
-                room_id
-                for room_id, room in coordinator.data.rooms.items()
-                if room.get("zone") == ZONE_LIVING
-            ]
+            rooms = coordinator.living_zone_rooms()
             await coordinator.async_send(
                 "PATCH",
                 "/api/zones/living",

@@ -280,6 +280,96 @@ async def test_living_zone_sensor(hass: HomeAssistant, fake: FakeMDG) -> None:
     assert hass.states.get("binary_sensor.bathroom_living_zone").state == "off"
 
 
+LIVING_ZONE = "sensor.my_home_living_zone"
+
+
+def _zone_writes(fake: FakeMDG) -> list:
+    return [r for r in fake.requests if r[0] == "PATCH" and "zone" in (r[2] or {})]
+
+
+async def test_living_zone_members(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    zone = hass.states.get(LIVING_ZONE)
+    assert zone.state == "1"
+    assert zone.attributes["unit_of_measurement"] == "rooms"
+    assert zone.attributes["rooms"] == ["Living room"]
+    assert zone.attributes["entity_id"] == ["climate.living_room"]
+    assert zone.attributes["other_entity_id"] == ["climate.bathroom"]
+    assert zone.attributes["hvac_mode"] == "auto"
+    assert zone.attributes["schedule"]["monday"] == ["06:00-08:00", "16:00-22:30"]
+
+
+async def test_join_and_leave_living_zone(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    detail_reads = fake.requests.count(("GET", "/api/rooms/0", None))
+    await hass.services.async_call(
+        DOMAIN, "join_living_zone", {}, target={ATTR_ENTITY_ID: "climate.bathroom"}, blocking=True
+    )
+    assert _zone_writes(fake) == [("PATCH", "/api/rooms/1", {"id": 1, "zone": "Living"})]
+    # A room that joins takes the zone's schedule, so schedules are read again.
+    assert fake.requests.count(("GET", "/api/rooms/0", None)) == detail_reads + 1
+    await hass.async_block_till_done()
+    zone = hass.states.get(LIVING_ZONE)
+    assert zone.state == "2"
+    assert zone.attributes["entity_id"] == ["climate.living_room", "climate.bathroom"]
+    assert zone.attributes["other_entity_id"] == []
+    assert hass.states.get("binary_sensor.bathroom_living_zone").state == "on"
+
+    # Joining again sends nothing.
+    await hass.services.async_call(
+        DOMAIN, "join_living_zone", {}, target={ATTR_ENTITY_ID: "climate.bathroom"}, blocking=True
+    )
+    assert len(_zone_writes(fake)) == 1
+
+    await hass.services.async_call(
+        DOMAIN,
+        "leave_living_zone",
+        {},
+        target={ATTR_ENTITY_ID: "climate.living_room"},
+        blocking=True,
+    )
+    assert _zone_writes(fake)[-1] == ("PATCH", "/api/rooms/0", {"id": 0, "zone": "None"})
+    await hass.async_block_till_done()
+    assert hass.states.get(LIVING_ZONE).attributes["rooms"] == ["Bathroom"]
+    assert hass.states.get("binary_sensor.living_room_living_zone").state == "off"
+
+
+async def test_last_room_cannot_leave_living_zone(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            "leave_living_zone",
+            {},
+            target={ATTR_ENTITY_ID: "climate.living_room"},
+            blocking=True,
+        )
+    assert err.value.translation_key == "living_zone_last_room"
+    assert _zone_writes(fake) == []
+
+
+async def test_living_zone_change_ignored_by_cc(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    original = fake._handle
+
+    def ignore_zone(method, uri, content):
+        if method == "PATCH" and isinstance(content, dict):
+            content = {k: v for k, v in content.items() if k != "zone"}
+        return original(method, uri, content)
+
+    fake._handle = ignore_zone
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            "join_living_zone",
+            {},
+            target={ATTR_ENTITY_ID: "climate.bathroom"},
+            blocking=True,
+        )
+    assert err.value.translation_key == "living_zone_unchanged"
+    assert hass.states.get(LIVING_ZONE).state == "1"
+
+
 async def test_diagnostic_entities_disabled_by_default(hass: HomeAssistant, fake: FakeMDG) -> None:
     entry = await _setup(hass)
     registry = er.async_get(hass)
@@ -1258,6 +1348,7 @@ async def test_cards_registered(hass: HomeAssistant) -> None:
     assert CARD_URLS == (
         "/danfoss_link/danfoss-link-schedule-card.js",
         "/danfoss_link/danfoss-link-away-card.js",
+        "/danfoss_link/danfoss-link-living-zone-card.js",
     )
     hass.http = MagicMock(async_register_static_paths=AsyncMock())
     with patch("homeassistant.components.frontend.add_extra_js_url") as add_js:

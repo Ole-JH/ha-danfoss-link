@@ -24,6 +24,8 @@ from .const import (
     MODE_INACTIVE,
     MODE_PAUSE,
     MODE_PLANNED,
+    ZONE_LIVING,
+    ZONE_NONE,
 )
 from .planned_pause import PlannedPause
 
@@ -249,6 +251,32 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
         await self.async_send(method, uri, content)
         # Not debounced: the UI should show what the CC accepted right away.
         await self.async_refresh()
+
+    def living_zone_rooms(self) -> list[int]:
+        """Ids of the rooms in the living zone, in the CC's order."""
+        return [
+            room_id for room_id, room in self.data.rooms.items() if room.get("zone") == ZONE_LIVING
+        ]
+
+    async def async_set_living_zone(self, room_id: int, member: bool) -> None:
+        """Move a room into or out of the living zone.
+
+        The app has no way to do this (it tells users to set up the living
+        zone on the CC). The CC takes ``zone`` on ``PATCH api/rooms/{id}``
+        like any other room field; check that it really changed.
+        """
+        zone = ZONE_LIVING if member else ZONE_NONE
+        await self.async_send("PATCH", f"/api/rooms/{room_id}", {"id": room_id, "zone": zone})
+        # A room that joins takes the zone's schedule: read schedules again.
+        self._schedules_fetched = None
+        await self.async_refresh()
+        room = self.data.rooms.get(room_id, {})
+        if room.get("zone") != zone:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="living_zone_unchanged",
+                translation_placeholders={"room": room.get("name") or str(room_id)},
+            )
 
     def active_at_home(self) -> dict[str, Any] | None:
         """The active "home now" (AtHome) override, if any."""
