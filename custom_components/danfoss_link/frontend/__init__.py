@@ -1,4 +1,4 @@
-"""Serve the dashboard cards (schedule, pause, living zone) and load them in the frontend."""
+"""Serve the dashboard cards (schedule, pause) and load them in the frontend."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ _FOLDER = Path(__file__).parent
 CARD_FILES = (
     "danfoss-link-schedule-card.js",
     "danfoss-link-away-card.js",
-    "danfoss-link-living-zone-card.js",
 )
 URL_BASE = "/danfoss_link"
 CARD_URLS = tuple(f"{URL_BASE}/{name}" for name in CARD_FILES)

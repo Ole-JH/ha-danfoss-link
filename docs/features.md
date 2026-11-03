@@ -138,25 +138,17 @@ zone** sensor on the CC counts its rooms and lists them (`rooms`,
 `entity_id`), the rooms outside it (`other_entity_id`), the zone's mode
 (`hvac_mode`: `auto` = schedule, `heat` = manual) and its schedule.
 
-Which rooms are in the living zone is set on the Danfoss Link CC's own
-display. Neither the app nor Home Assistant can change it: the CC accepts no
-such change over the network (see [protocol.md](protocol.md)). After a change
-on the CC, Home Assistant shows it at the next poll.
-
-### Living zone card
-
-The **Danfoss Link living zone** card lists the zone's rooms and the other
-rooms with their current and target temperatures, switches the zone between
-schedule and manual, and shows today's at home times. Tap a room's name for
-its thermostat.
-
-```yaml
-type: custom:danfoss-link-living-zone-card
-# All optional.
-entity: sensor.my_home_living_zone  # default: the (first) Danfoss Link living zone
-show_others: true                   # list the rooms outside the zone
-show_hint: true                     # the note that rooms are changed on the CC
-```
+Which rooms are in the living zone can only be changed on the Danfoss Link
+CC's own display. We tried to make it changeable from Home Assistant (with a
+dashboard card to add and remove rooms) and tested it on a real CC, but the
+CC refuses it over the network. A change sent to a room
+(`PATCH api/rooms/{id}`) may only touch its setpoint, Schedule/Manual setting,
+comfort/away temperatures and schedule; a change sent to the living zone
+(`PATCH api/zones/living`) may only touch its name, Schedule/Manual setting
+and schedule. Neither has a field for the zone's rooms, and the Danfoss Link
+app cannot do it either (it tells you to set up the living zone on the CC).
+Details are in [protocol.md](protocol.md). After a change on the CC, Home
+Assistant shows it at the next poll.
 
 Diagnostic entities marked *disabled by default* can be turned on under the
 device's entity list in Home Assistant.
@@ -174,8 +166,8 @@ How the integration compares with the Danfoss Link app (1.3.x).
 | Room temperature and target temperature | ✅ | `climate` entity and temperature sensor |
 | Schedule / Manual per room | ✅ | Thermostat Auto/Heat and the room's Mode select |
 | At-home / away temperatures | ✅ | Number entities per room |
-| Living zone (shared mode for its rooms) | ✅ | Mode changes are sent to the whole zone; living zone sensor and card |
-| Change which rooms are in the living zone | ❌ | Only on the CC's display; the CC refuses it over the network (not in the app either) |
+| Living zone (shared mode for its rooms) | ✅ | Mode changes are sent to the whole zone; living zone sensor |
+| Change which rooms are in the living zone | ❌ | Tried and not possible: the CC refuses it over the network (not in the app either). Only on the CC's display |
 | House modes: at home, vacation, pause, boost | ✅ | House mode select and house state sensor |
 | Pause with an end time, planned pause | ✅ | `pause` / `cancel_pause` actions and the pause & vacation card |
 | Vacation temperature | ✅ | Number entity |

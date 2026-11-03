@@ -1327,7 +1327,6 @@ async def test_cards_registered(hass: HomeAssistant) -> None:
     assert CARD_URLS == (
         "/danfoss_link/danfoss-link-schedule-card.js",
         "/danfoss_link/danfoss-link-away-card.js",
-        "/danfoss_link/danfoss-link-living-zone-card.js",
     )
     hass.http = MagicMock(async_register_static_paths=AsyncMock())
     with patch("homeassistant.components.frontend.add_extra_js_url") as add_js:

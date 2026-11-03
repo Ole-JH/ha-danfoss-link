@@ -18,8 +18,7 @@ release PR to `main` is merged.
   ![Pause & vacation card](https://raw.githubusercontent.com/Ole-JH/ha-danfoss-link/v0.4.0/docs/images/away-card.png)
 
 - **Outdoor temperature** sensor, on setups whose Danfoss controller has an outdoor sensor. Without one, no sensor is added.
-- **Living zone** sensor: how many rooms are in the living zone (they share one mode and schedule), with the rooms, the other rooms, the zone's mode and schedule as attributes. Rooms are still added or removed on the Danfoss controller's display; it accepts no such change over the network.
-- **Living zone card** for dashboards (`custom:danfoss-link-living-zone-card`), included with the integration: the zone's rooms and the other rooms with their temperatures, today's at home times, and one tap to switch the zone between schedule and manual.
+- **Living zone** sensor: how many rooms are in the living zone (they share one mode and schedule), with the rooms, the other rooms, the zone's mode and schedule as attributes. Adding or removing rooms from Home Assistant was tried but is not possible: the Danfoss controller only allows it on its own display.
 
 ### Fixes
 - A room you switch to Manual and then back to Schedule while the house is *At home* now gets its at-home temperature again. Before, the Danfoss controller quietly left that room out of *At home*, so it heated to its away temperature even though the house said At home.

@@ -292,7 +292,10 @@ PATCH api/zones/living <- {"name": ..., "schedule": {...}}   (living zone)
   `name` (required), `regulationType` (`Schedule`|`Manual`), `schedule`,
   `additionalProperties: false`. `{"name": "Living", "rooms": [...]}` is
   refused. So living zone membership can only be changed on the CC's
-  display; the integration shows it read-only (Living zone sensor and card).
+  display. A join/leave action and a dashboard card to add and remove rooms
+  were built and tested live on 2026-11-03, then dropped for this reason;
+  the integration shows membership read-only (Living zone sensor, per-room
+  living zone binary sensor).
 - Ole's CC (firmware 4.2.1724, 2026-11-02) leaves `schedule` out of
   `GET api/rooms`, but `GET api/rooms/{id}` has it (confirmed live the same
   day for all 8 rooms, living zone rooms all showing the zone's schedule;
