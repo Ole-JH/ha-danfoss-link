@@ -1,6 +1,10 @@
 {
   "domain": "danfoss_link",
   "name": "Danfoss Link",
+  "after_dependencies": [
+    "frontend",
+    "http"
+  ],
   "codeowners": [
     "@Ole-JH"
   ],
@@ -13,5 +17,5 @@
     "ecdsa==0.19.2",
     "asn1crypto==1.5.1"
   ],
-  "version": "0.3.1"
+  "version": "0.4.0"
 }

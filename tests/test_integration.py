@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import functools
 import json
 from pathlib import Path
 import shutil
+from typing import Any
 from unittest.mock import PropertyMock, patch
 
 from homeassistant.components import persistent_notification
@@ -36,7 +37,8 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
+import voluptuous as vol
 
 from custom_components.danfoss_link import coordinator as coordinator_module
 from custom_components.danfoss_link.api import (
@@ -45,7 +47,7 @@ from custom_components.danfoss_link.api import (
     pair_with_code,
     pairing as pairing_module,
 )
-from custom_components.danfoss_link.cc_time import parse_cc_time
+from custom_components.danfoss_link.cc_time import clock_drift, parse_cc_time
 from custom_components.danfoss_link.const import (
     CONF_CERT_PEM,
     CONF_CODE,
@@ -224,6 +226,15 @@ async def test_setup_creates_entities(hass: HomeAssistant, fake: FakeMDG) -> Non
     bathroom = hass.states.get("climate.bathroom")
     assert bathroom.state == HVACMode.HEAT
     assert bathroom.attributes[ATTR_HVAC_ACTION] == HVACAction.IDLE
+    # Weekly schedule: the at home periods; away (setback) fills the rest.
+    week = living.attributes["schedule"]
+    assert week["monday"] == ["06:00-08:00", "16:00-22:30"]
+    assert week["sunday"] == ["07:30-24:00"]
+    assert living.attributes["schedule_today"] in (week["monday"], week["sunday"])
+    assert "schedule" not in bathroom.attributes
+    # Schedules come from api/rooms/{id}, read once and then hourly, not every poll.
+    await entry.runtime_data.async_refresh()
+    assert [r for r in fake.requests if r[1] == "/api/rooms/0"] == [("GET", "/api/rooms/0", None)]
 
     assert hass.states.get("sensor.living_room_temperature").state == "20.6"
     alarms = hass.states.get("sensor.my_home_unread_alarms")
@@ -268,6 +279,40 @@ async def test_living_zone_sensor(hass: HomeAssistant, fake: FakeMDG) -> None:
     await _setup(hass)
     assert hass.states.get("binary_sensor.living_room_living_zone").state == "on"
     assert hass.states.get("binary_sensor.bathroom_living_zone").state == "off"
+
+
+LIVING_ZONE = "sensor.my_home_living_zone"
+
+
+async def test_living_zone(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    zone = hass.states.get(LIVING_ZONE)
+    assert zone.state == "1"
+    assert zone.attributes["unit_of_measurement"] == "rooms"
+    assert zone.attributes["rooms"] == ["Living room"]
+    assert zone.attributes["entity_id"] == ["climate.living_room"]
+    assert zone.attributes["other_entity_id"] == ["climate.bathroom"]
+    assert zone.attributes["hvac_mode"] == "auto"
+    assert zone.attributes["schedule"]["monday"] == ["06:00-08:00", "16:00-22:30"]
+
+    # Switching a member to Manual switches the zone, and the sensor follows.
+    await hass.services.async_call(
+        CLIMATE_DOMAIN,
+        SERVICE_SET_HVAC_MODE,
+        {ATTR_ENTITY_ID: "climate.living_room", ATTR_HVAC_MODE: HVACMode.HEAT},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get(LIVING_ZONE).attributes["hvac_mode"] == "heat"
+
+    # Membership is set on the CC's display; the sensor follows the next poll.
+    fake.state["/api/rooms"][1]["zone"] = "Living"
+    await hass.config_entries.async_entries(DOMAIN)[0].runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    zone = hass.states.get(LIVING_ZONE)
+    assert zone.state == "2"
+    assert zone.attributes["entity_id"] == ["climate.living_room", "climate.bathroom"]
+    assert zone.attributes["other_entity_id"] == []
 
 
 async def test_diagnostic_entities_disabled_by_default(hass: HomeAssistant, fake: FakeMDG) -> None:
@@ -432,6 +477,130 @@ async def test_house_mode(hass: HomeAssistant, fake: FakeMDG) -> None:
     assert writes == [("PUT", "/api/modes/athome", {"type": "AtHome", "state": "Inactive"})]
     await hass.async_block_till_done()
     assert hass.states.get(entity).state == "schedule"
+
+
+async def test_room_back_on_schedule_rejoins_at_home(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: house, "option": "at_home"},
+        blocking=True,
+    )  # fmt: skip
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["at_home_rooms"] == ["Living room", "Bathroom"]
+
+    # Manual takes the living zone out of the override on the CC ...
+    await hass.services.async_call(
+        CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE,
+        {ATTR_ENTITY_ID: "climate.living_room", ATTR_HVAC_MODE: HVACMode.HEAT}, blocking=True,
+    )  # fmt: skip
+    await hass.async_block_till_done()
+    assert hass.states.get(house).state == "at_home"
+    assert hass.states.get(house).attributes["at_home_rooms"] == ["Bathroom"]
+
+    # ... and Schedule puts it back.
+    fake.requests.clear()
+    await hass.services.async_call(
+        CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE,
+        {ATTR_ENTITY_ID: "climate.living_room", ATTR_HVAC_MODE: HVACMode.AUTO}, blocking=True,
+    )  # fmt: skip
+    writes = [r for r in fake.requests if r[0] != "GET"]
+    assert writes == [
+        ("PATCH", "/api/zones/living", {"name": "Living", "regulationType": "Schedule"}),
+        ("PUT", "/api/modes/athome", {"type": "AtHome", "state": "Inactive"}),
+        ("PUT", "/api/modes/athome", {"type": "AtHome", "state": "Active", "rooms": [0, 1]}),
+    ]
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["at_home_rooms"] == ["Living room", "Bathroom"]
+
+
+async def test_schedule_without_at_home_sends_no_mode(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION,
+        {ATTR_ENTITY_ID: "select.bathroom_mode", "option": "schedule"}, blocking=True,
+    )  # fmt: skip
+    assert not [r for r in fake.requests if r[0] != "GET" and r[1].startswith("/api/modes")]
+
+
+async def test_reselecting_at_home_covers_all_rooms(hass: HomeAssistant, fake: FakeMDG) -> None:
+    fake.state["/api/modes"][0] = {"type": "AtHome", "state": "Active", "rooms": [1]}
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    assert hass.states.get(house).attributes["at_home_rooms"] == ["Bathroom"]
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: house, "option": "at_home"},
+        blocking=True,
+    )  # fmt: skip
+    writes = [r for r in fake.requests if r[0] != "GET"]
+    assert writes == [
+        ("PUT", "/api/modes/athome", {"type": "AtHome", "state": "Inactive"}),
+        ("PUT", "/api/modes/athome", {"type": "AtHome", "state": "Active", "rooms": [0, 1]}),
+    ]
+
+    # Already covering every room: nothing to send.
+    fake.requests.clear()
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: house, "option": "at_home"},
+        blocking=True,
+    )  # fmt: skip
+    assert not [r for r in fake.requests if r[0] != "GET"]
+
+
+async def test_house_state_manual(hass: HomeAssistant, fake: FakeMDG) -> None:
+    fake.state["/api/system/status"] = {"currentState": "Manual"}
+    await _setup(hass)
+    assert hass.states.get("sensor.my_home_house_state").state == "manual"
+
+
+async def test_outdoor_temperature(hass: HomeAssistant, fake: FakeMDG) -> None:
+    fake.state["/api/system/status"] = {"currentState": "AtHome", "outdoorTemperature": 8.9}
+    entry = await _setup(hass)
+    state = hass.states.get("sensor.my_home_outdoor_temperature")
+    assert state.state == "8.9"
+    assert state.attributes["device_class"] == "temperature"
+    assert state.attributes["unit_of_measurement"] == "°C"
+
+    fake.state["/api/system/status"]["outdoorTemperature"] = -3.5
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.my_home_outdoor_temperature").state == "-3.5"
+
+    # A sensor that stops answering shows as unknown, not as a stale value.
+    fake.state["/api/system/status"]["outdoorTemperature"] = None
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.my_home_outdoor_temperature").state == "unknown"
+
+
+@pytest.mark.parametrize(
+    "status",
+    [{"currentState": "AtHome"}, {"currentState": "AtHome", "outdoorTemperature": None}],
+)
+async def test_no_outdoor_temperature(
+    hass: HomeAssistant, fake: FakeMDG, status: dict[str, Any]
+) -> None:
+    """No outdoor sensor on the CC: no outdoor temperature entity."""
+    fake.state["/api/system/status"] = status
+    await _setup(hass)
+    assert hass.states.get("sensor.my_home_outdoor_temperature") is None
+    assert hass.states.get("sensor.my_home_house_state") is not None
+
+
+async def test_switch_unavailable_while_node_dead(hass: HomeAssistant, fake: FakeMDG) -> None:
+    fake.state["/api/alarms"].append(
+        {"id": 9, "level": "Warning", "node": "FT-016|Towel rail", "isRead": True,
+         "titleTextId": "IDS_UA1_ALERTVIEWER_NODE_DEAD_ALERT",
+         "createdDate": "2026-05-21T03:21:16"}
+    )  # fmt: skip
+    entry = await _setup(hass)
+    assert hass.states.get("switch.my_home_towel_rail").state == "unavailable"
+
+    # The CC removes the alarm when the unit answers again.
+    fake.state["/api/alarms"].pop()
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get("switch.my_home_towel_rail").state == "off"
 
 
 async def test_switch_and_numbers(hass: HomeAssistant, fake: FakeMDG) -> None:
@@ -642,6 +811,293 @@ async def test_plan_vacation_cc_local_time(hass: HomeAssistant, fake: FakeMDG) -
     assert hass.states.get("sensor.my_home_vacation_start").state == "2030-07-01T10:00:00+00:00"
 
 
+def _mode_writes(fake: FakeMDG) -> list:
+    return [r for r in fake.requests if r[0] == "PUT" and r[1].startswith("/api/modes/")]
+
+
+async def test_pause_for_a_while(hass: HomeAssistant, fake: FakeMDG, freezer) -> None:
+    freezer.move_to("2030-07-01T12:00:20+00:00")
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    assert hass.states.get(house).attributes["pause_end"] is None
+    assert hass.states.get(house).attributes["pause_temperature"] == 6.0
+    assert hass.states.get("sensor.my_home_pause_end").state == "unknown"
+
+    await hass.services.async_call(
+        DOMAIN, "pause", {"duration": {"hours": 2}}, target={ATTR_ENTITY_ID: house}, blocking=True
+    )
+    assert _mode_writes(fake) == [
+        (
+            "PUT",
+            "/api/modes/pause",
+            {"type": "Pause", "state": "Active", "endTime": "2030-07-01T14:00:00Z"},
+        )
+    ]
+    await hass.async_block_till_done()
+    state = hass.states.get(house)
+    assert state.state == "pause"
+    assert state.attributes["pause_end"] == "2030-07-01T14:00:00+00:00"
+    assert hass.states.get("sensor.my_home_pause_end").state == "2030-07-01T14:00:00+00:00"
+
+    # Pausing again while paused only moves the end.
+    fake.requests.clear()
+    await hass.services.async_call(
+        DOMAIN,
+        "pause",
+        {"end": "2030-07-01T16:30:00+00:00"},
+        target={ATTR_ENTITY_ID: house},
+        blocking=True,
+    )
+    assert _mode_writes(fake) == [
+        (
+            "PUT",
+            "/api/modes/pause",
+            {"type": "Pause", "state": "Active", "endTime": "2030-07-01T16:30:00Z"},
+        )
+    ]
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["pause_end"] == "2030-07-01T16:30:00+00:00"
+
+    # Resuming is going back to the schedule.
+    fake.requests.clear()
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: house, "option": "schedule"},
+        blocking=True,
+    )  # fmt: skip
+    assert _mode_writes(fake) == [
+        ("PUT", "/api/modes/pause", {"type": "Pause", "state": "Inactive"})
+    ]
+    await hass.async_block_till_done()
+    assert hass.states.get(house).state == "schedule"
+    assert hass.states.get(house).attributes["pause_end"] is None
+    assert hass.states.get("sensor.my_home_pause_end").state == "unknown"
+
+
+async def test_pause_until_resumed(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: house, "option": "vacation"},
+        blocking=True,
+    )  # fmt: skip
+    fake.requests.clear()
+    await hass.services.async_call(
+        DOMAIN, "pause", {}, target={ATTR_ENTITY_ID: house}, blocking=True
+    )
+    # Another temporary mode is ended first; no end time means until resumed.
+    assert _mode_writes(fake) == [
+        ("PUT", "/api/modes/vacation", {"type": "Vacation", "state": "Inactive"}),
+        ("PUT", "/api/modes/pause", {"type": "Pause", "state": "Active"}),
+    ]
+    await hass.async_block_till_done()
+    assert hass.states.get(house).state == "pause"
+    assert hass.states.get(house).attributes["pause_end"] is None
+
+
+async def test_pause_replaces_at_home(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: house, "option": "at_home"},
+        blocking=True,
+    )  # fmt: skip
+    fake.requests.clear()
+    await hass.services.async_call(
+        DOMAIN, "pause", {"duration": "00:30:00"}, target={ATTR_ENTITY_ID: house}, blocking=True
+    )
+    # The CC ends AtHome by itself when a pause starts (seen live).
+    writes = _mode_writes(fake)
+    assert [w[1] for w in writes] == ["/api/modes/pause"]
+    assert "endTime" in writes[0][2]
+
+
+async def test_pause_cc_local_time(hass: HomeAssistant, fake: FakeMDG) -> None:
+    fake.state["/api/system/info"]["systemTime"] = "2026-10-16T07:00:00+01:00"
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        DOMAIN,
+        "pause",
+        {"end": "2030-01-05T10:00:00+00:00"},
+        target={ATTR_ENTITY_ID: house},
+        blocking=True,
+    )
+    assert _mode_writes(fake)[0][2]["endTime"] == "2030-01-05T11:00:00"
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["pause_end"] == "2030-01-05T11:00:00+01:00"
+
+
+async def test_planned_pause(hass: HomeAssistant, fake: FakeMDG, freezer) -> None:
+    freezer.move_to("2030-07-01T12:00:00+00:00")
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        SELECT_DOMAIN, SERVICE_SELECT_OPTION, {ATTR_ENTITY_ID: house, "option": "vacation"},
+        blocking=True,
+    )  # fmt: skip
+    fake.requests.clear()
+    await hass.services.async_call(
+        DOMAIN,
+        "pause",
+        {"start": "2030-07-01T18:00:00+00:00", "duration": {"hours": 3}},
+        target={ATTR_ENTITY_ID: house},
+        blocking=True,
+    )
+    # The CC cannot plan a pause: Home Assistant keeps it until the start.
+    assert _mode_writes(fake) == []
+    await hass.async_block_till_done()
+    state = hass.states.get(house)
+    assert state.state == "vacation"
+    assert state.attributes["pause_state"] == "planned"
+    assert state.attributes["pause_start"] == "2030-07-01T18:00:00+00:00"
+    assert state.attributes["pause_end"] == "2030-07-01T21:00:00+00:00"
+    assert hass.states.get("sensor.my_home_pause_start").state == "2030-07-01T18:00:00+00:00"
+
+    freezer.move_to("2030-07-01T18:00:01+00:00")
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert _mode_writes(fake) == [
+        ("PUT", "/api/modes/vacation", {"type": "Vacation", "state": "Inactive"}),
+        (
+            "PUT",
+            "/api/modes/pause",
+            {"type": "Pause", "state": "Active", "endTime": "2030-07-01T21:00:00Z"},
+        ),
+    ]
+    state = hass.states.get(house)
+    assert state.state == "pause"
+    assert state.attributes["pause_state"] == "active"
+    assert state.attributes["pause_end"] == "2030-07-01T21:00:00+00:00"
+
+
+async def test_planned_pause_survives_restart(hass: HomeAssistant, fake: FakeMDG, freezer) -> None:
+    freezer.move_to("2030-07-01T12:00:00+00:00")
+    entry = await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        DOMAIN, "pause", {"start": "2030-07-01T18:00:00+00:00"}, target={ATTR_ENTITY_ID: house},
+        blocking=True,
+    )  # fmt: skip
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["pause_state"] == "planned"
+
+    # Cancelling a plan sends nothing to the CC.
+    await hass.services.async_call(
+        DOMAIN, "cancel_pause", {}, target={ATTR_ENTITY_ID: house}, blocking=True
+    )
+    assert _mode_writes(fake) == []
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["pause_state"] is None
+    assert hass.states.get("sensor.my_home_pause_start").state == "unknown"
+    freezer.move_to("2030-07-01T19:00:00+00:00")
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert _mode_writes(fake) == []
+
+
+async def test_planned_pause_retries_when_unreachable(
+    hass: HomeAssistant, fake: FakeMDG, freezer
+) -> None:
+    freezer.move_to("2030-07-01T12:00:00+00:00")
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        DOMAIN, "pause", {"start": "2030-07-01T12:10:00+00:00"}, target={ATTR_ENTITY_ID: house},
+        blocking=True,
+    )  # fmt: skip
+    fake.reject_writes = True
+    freezer.move_to("2030-07-01T12:10:01+00:00")
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["pause_state"] == "planned"
+    fake.reject_writes = False
+    freezer.move_to("2030-07-01T12:11:05+00:00")
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert hass.states.get(house).state == "pause"
+    assert hass.states.get(house).attributes["pause_end"] is None
+
+
+async def test_pause_start_in_past_pauses_now(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    await hass.services.async_call(
+        DOMAIN,
+        "pause",
+        {"start": "2020-01-01 10:00:00"},
+        target={ATTR_ENTITY_ID: "select.my_home_house_mode"},
+        blocking=True,
+    )
+    assert _mode_writes(fake) == [("PUT", "/api/modes/pause", {"type": "Pause", "state": "Active"})]
+
+
+async def test_mode_times_follow_cc_clock(hass: HomeAssistant, fake: FakeMDG, freezer) -> None:
+    # Ole's CC ran 18 minutes fast: send and show times on its clock.
+    freezer.move_to("2030-07-01T12:00:00+00:00")
+    fake.state["/api/system/info"]["systemTime"] = "2030-07-01T14:18:30+02:00"
+    await _setup(hass)
+    house = "select.my_home_house_mode"
+    await hass.services.async_call(
+        DOMAIN, "pause", {"duration": {"minutes": 20}}, target={ATTR_ENTITY_ID: house},
+        blocking=True,
+    )  # fmt: skip
+    assert _mode_writes(fake)[0][2]["endTime"] == "2030-07-01T14:38:00"
+    await hass.async_block_till_done()
+    assert hass.states.get(house).attributes["pause_end"] == "2030-07-01T14:20:00+02:00"
+    await hass.services.async_call(
+        DOMAIN,
+        "plan_vacation",
+        {"start": "2030-07-10T10:00:00+00:00", "end": "2030-07-12T10:00:00+00:00"},
+        blocking=True,
+    )
+    assert _vacation_writes(fake)[-1][2]["startTime"] == "2030-07-10T12:18:00"
+    await hass.async_block_till_done()
+    attrs = hass.states.get(house).attributes
+    assert attrs["vacation_state"] == "planned"
+    assert attrs["vacation_start"] == "2030-07-10T12:00:00+02:00"
+    assert attrs["vacation_temperature"] == 15.0
+
+
+def test_clock_drift() -> None:
+    now = datetime(2030, 7, 1, 12, 0, tzinfo=UTC)
+    assert clock_drift({"systemTime": "2030-07-01T12:18:30Z"}, now) == timedelta(minutes=18)
+    assert clock_drift({"systemTime": "2030-07-01T13:55:00+02:00"}, now) == timedelta(minutes=-5)
+    # Hours off is a wrong clock, not drift; and no systemTime at all.
+    assert clock_drift({"systemTime": "2030-07-01T15:00:00Z"}, now) == timedelta(0)
+    assert clock_drift({}, now) == timedelta(0)
+
+
+@pytest.mark.parametrize(
+    ("entity", "data", "error"),
+    [
+        ("select.my_home_house_mode", {"end": "2020-01-01 12:00:00"}, "pause_end_in_past"),
+        ("select.living_room_mode", {}, "not_house_mode"),
+    ],
+)
+async def test_pause_invalid(
+    hass: HomeAssistant, fake: FakeMDG, entity: str, data: dict, error: str
+) -> None:
+    await _setup(hass)
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            DOMAIN, "pause", data, target={ATTR_ENTITY_ID: entity}, blocking=True
+        )
+    assert err.value.translation_key == error
+    assert _mode_writes(fake) == []
+
+
+async def test_pause_duration_and_end_exclusive(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            "pause",
+            {"duration": "01:00:00", "end": "2030-01-01 12:00:00"},
+            target={ATTR_ENTITY_ID: "select.my_home_house_mode"},
+            blocking=True,
+        )
+
+
 @pytest.mark.parametrize(
     ("start", "end", "error"),
     [
@@ -781,3 +1237,130 @@ def test_english_translation_matches_strings() -> None:
     strings = json.loads((base / "strings.json").read_text())
     assert json.loads((base / "translations" / "en.json").read_text()) == strings
     assert strings["entity"]["binary_sensor"]["living_zone"]["state"] == {"off": "No", "on": "Yes"}
+
+
+def _schedule_writes(fake: FakeMDG) -> list[tuple[str, str, dict]]:
+    return [r for r in fake.requests if r[0] == "PATCH" and "schedule" in (r[2] or {})]
+
+
+async def test_set_schedule_room(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    await hass.services.async_call(
+        DOMAIN,
+        "set_schedule",
+        {"days": ["tuesday", "monday"], "at_home": ["06:00-08:00", "16:00-22:30"]},
+        target={ATTR_ENTITY_ID: "climate.bathroom"},
+        blocking=True,
+    )
+    day = [
+        {"startTimeFromMidnight": "00:00:00", "endTimeFromMidnight": "06:00:00", "state": "Away"},
+        {"startTimeFromMidnight": "06:00:00", "endTimeFromMidnight": "08:00:00", "state": "AtHome"},
+        {"startTimeFromMidnight": "08:00:00", "endTimeFromMidnight": "16:00:00", "state": "Away"},
+        {"startTimeFromMidnight": "16:00:00", "endTimeFromMidnight": "22:30:00", "state": "AtHome"},
+        {"startTimeFromMidnight": "22:30:00", "endTimeFromMidnight": "1.00:00:00", "state": "Away"},
+    ]
+    # All days in one PATCH: each round trip through the relay is slow.
+    assert _schedule_writes(fake) == [
+        ("PATCH", "/api/rooms/1", {"id": 1, "schedule": {"monday": day, "tuesday": day}}),
+    ]
+    # Shown without reading the rooms again.
+    assert [r for r in fake.requests if r[:2] == ("GET", "/api/rooms/1")] == [
+        ("GET", "/api/rooms/1", None)  # only the one at setup
+    ]
+    # Read back right away, not after the hourly schedule refresh.
+    week = hass.states.get("climate.bathroom").attributes["schedule"]
+    assert week["monday"] == week["tuesday"] == ["06:00-08:00", "16:00-22:30"]
+
+
+async def test_set_schedule_living_zone(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    await hass.services.async_call(
+        DOMAIN,
+        "set_schedule",
+        {"days": "saturday"},
+        target={ATTR_ENTITY_ID: "climate.living_room"},
+        blocking=True,
+    )
+    assert _schedule_writes(fake) == [
+        (
+            "PATCH",
+            "/api/zones/living",
+            {
+                "name": "Living",
+                "schedule": {
+                    "saturday": [
+                        {
+                            "startTimeFromMidnight": "00:00:00",
+                            "endTimeFromMidnight": "1.00:00:00",
+                            "state": "Away",
+                        }
+                    ]
+                },
+            },
+        )
+    ]
+    assert hass.states.get("climate.living_room").attributes["schedule"]["saturday"] == []
+
+
+async def test_set_schedule_invalid_period(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            DOMAIN,
+            "set_schedule",
+            {"days": ["monday"], "at_home": ["06:10-08:00"]},
+            target={ATTR_ENTITY_ID: "climate.bathroom"},
+            blocking=True,
+        )
+    assert err.value.translation_key == "invalid_period"
+    assert _schedule_writes(fake) == []
+
+
+async def test_cards_registered(hass: HomeAssistant) -> None:
+    from unittest.mock import AsyncMock, MagicMock  # noqa: PLC0415
+
+    from custom_components.danfoss_link.frontend import (  # noqa: PLC0415
+        CARD_URLS,
+        async_register_card,
+    )
+
+    assert CARD_URLS == (
+        "/danfoss_link/danfoss-link-schedule-card.js",
+        "/danfoss_link/danfoss-link-away-card.js",
+    )
+    hass.http = MagicMock(async_register_static_paths=AsyncMock())
+    with patch("homeassistant.components.frontend.add_extra_js_url") as add_js:
+        await async_register_card(hass)
+    (paths,) = hass.http.async_register_static_paths.call_args.args
+    assert [path.url_path for path in paths] == list(CARD_URLS)
+    loaded = [call.args[1] for call in add_js.call_args_list]
+    assert [url.split("?v=")[0] for url in loaded] == list(CARD_URLS)
+
+
+async def test_set_schedule_falls_back_to_one_day_per_patch(
+    hass: HomeAssistant, fake: FakeMDG
+) -> None:
+    await _setup(hass)
+    original = fake._handle
+
+    def handle(method, uri, content):
+        if method == "PATCH" and len((content or {}).get("schedule", {})) > 1:
+            fake.requests.append((method, uri, content))
+            return 400, {"errorMessages": ["JSON content does not conform to JSON Schema."]}
+        return original(method, uri, content)
+
+    fake._handle = handle
+    await hass.services.async_call(
+        DOMAIN,
+        "set_schedule",
+        {"days": ["monday", "sunday"], "at_home": ["06:00-08:00"]},
+        target={ATTR_ENTITY_ID: "climate.living_room"},
+        blocking=True,
+    )
+    assert [list(r[2]["schedule"]) for r in _schedule_writes(fake)] == [
+        ["monday", "sunday"],
+        ["monday"],
+        ["sunday"],
+    ]
+    week = hass.states.get("climate.living_room").attributes["schedule"]
+    assert week["monday"] == week["sunday"] == ["06:00-08:00"]

@@ -137,8 +137,12 @@
           "asleep": "Asleep",
           "vacation": "Vacation",
           "pause": "Pause",
-          "boost": "Boost"
+          "boost": "Boost",
+          "manual": "Manual"
         }
+      },
+      "outdoor_temperature": {
+        "name": "Outdoor temperature"
       },
       "wifi_signal": {
         "name": "Wi-Fi signal"
@@ -148,6 +152,16 @@
       },
       "vacation_end": {
         "name": "Vacation end"
+      },
+      "pause_start": {
+        "name": "Pause start"
+      },
+      "pause_end": {
+        "name": "Pause end"
+      },
+      "living_zone": {
+        "name": "Living zone",
+        "unit_of_measurement": "rooms"
       }
     },
     "binary_sensor": {
@@ -196,6 +210,42 @@
           "description": "Which CC. Can be left out if you have only one."
         }
       }
+    },
+    "set_schedule": {
+      "name": "Set schedule",
+      "description": "Replaces the weekly schedule on the chosen days: at home in the given periods, away (setback) the rest of the day. A room in the living zone changes the schedule of every room in the zone.",
+      "fields": {
+        "days": {
+          "name": "Days",
+          "description": "The weekdays to change. The other days are kept."
+        },
+        "at_home": {
+          "name": "At home periods",
+          "description": "Periods as HH:MM-HH:MM in 15-minute steps, e.g. 06:00-08:00. Use 24:00 for midnight at the end of the day. Leave empty for away all day."
+        }
+      }
+    },
+    "pause": {
+      "name": "Pause heating",
+      "description": "Pauses heating on the CC: every room, Manual ones too, holds the pause temperature until the end time or until you choose another house mode. Give a start to plan the pause for later; Home Assistant starts it then. Give a duration or an end, or neither to pause until resumed. Pausing again while paused moves the end time.",
+      "fields": {
+        "start": {
+          "name": "Start",
+          "description": "Plan the pause to start later. Leave out to pause now."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "How long to pause, e.g. 2 hours."
+        },
+        "end": {
+          "name": "End",
+          "description": "When the pause ends and the CC follows its weekly schedule again."
+        }
+      }
+    },
+    "cancel_pause": {
+      "name": "Cancel pause",
+      "description": "Ends a running pause, or cancels a planned one. The CC then follows its weekly schedule."
     }
   },
   "exceptions": {
@@ -210,6 +260,34 @@
     },
     "not_loaded": {
       "message": "The Danfoss Link CC is not loaded."
+    },
+    "invalid_period": {
+      "message": "\"{period}\" is not a valid period. Use HH:MM-HH:MM in 15-minute steps, e.g. 06:00-08:00."
+    },
+    "no_pause": {
+      "message": "This CC has no pause mode."
+    },
+    "not_house_mode": {
+      "message": "Choose the Danfoss Link house mode entity."
+    },
+    "pause_end_in_past": {
+      "message": "The pause must end in the future."
+    },
+    "pause_end_before_start": {
+      "message": "The pause must end after it starts."
+    }
+  },
+  "selector": {
+    "weekday": {
+      "options": {
+        "monday": "Monday",
+        "tuesday": "Tuesday",
+        "wednesday": "Wednesday",
+        "thursday": "Thursday",
+        "friday": "Friday",
+        "saturday": "Saturday",
+        "sunday": "Sunday"
+      }
     }
   }
 }

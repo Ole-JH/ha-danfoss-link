@@ -13,6 +13,8 @@ from .entity import DanfossLinkEntity
 
 PARALLEL_UPDATES = 1
 
+_NODE_DEAD = "IDS_UA1_ALERTVIEWER_NODE_DEAD_ALERT"
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -40,7 +42,24 @@ class DanfossLinkOnOffDevice(DanfossLinkEntity, SwitchEntity):
 
     @property
     def available(self) -> bool:
-        return super().available and self.device_id in self.coordinator.data.onoffdevices
+        return (
+            super().available
+            and self.device_id in self.coordinator.data.onoffdevices
+            and not self._node_dead()
+        )
+
+    def _node_dead(self) -> bool:
+        """Whether the CC has a "no response from unit" alarm for this device.
+
+        The CC still accepts and reports state changes for a dead node, but
+        nothing switches. The alarm's node reads "<address>|<device name>".
+        """
+        name = self._device.get("name")
+        return bool(name) and any(
+            alarm.get("titleTextId") == _NODE_DEAD
+            and str(alarm.get("node") or "").split("|")[-1] == name
+            for alarm in self.coordinator.data.alarms
+        )
 
     @property
     def is_on(self) -> bool | None:

@@ -232,6 +232,15 @@ content such as:
 `setpoint.temperature` changes the current period only (matches CC firmware
 4.0.36 release note); `atHomeSetpoint` changes the comfort temperature.
 
+Confirmed live on 2026-11-02 (CC firmware 4.2.1724, integration 0.3.1): a
+room in Schedule mode (`AtHome`, `atHomeSetpoint` 18) took
+`{"setpoint": {"temperature": 18.5}}`; the next poll of `api/rooms` showed
+`setpoint.temperature` 18.5, `regulation.type` still Schedule,
+`atHomeSetpoint` and `manualSetpoint` unchanged, and `regulationState`
+going from `Deadband` to `Heating` at once. Writing 18 back returned the
+room to `Deadband`. So the climate entity's setpoint is a temporary
+override in Auto and does not touch the comfort temperature.
+
 Weekly schedules (APK 1.3.5 `PatchRoomRequest`, `S.e`, `S.f`,
 `EditRoomScheduleActivity`; not yet tried live):
 
@@ -261,6 +270,53 @@ PATCH api/zones/living <- {"name": ..., "schedule": {...}}   (living zone)
   `api/rooms/{id}`. Sending `regulation.type` to `api/rooms/{id}` for a
   living-zone room fails (seen on Ole's CC): HTTP 400 "Can't change
   regulation type of rooms that are part of the Living Zone".
+- Living zone membership: the app cannot change which rooms are in the
+  living zone. Its only text about it is "You must configure a Living Zone
+  with rooms on the Danfoss Link CC before using the app", and its only
+  zone request is the `PATCH api/zones/living` above (`PatchZoneResponse`;
+  no zone GET). Rooms outside the zone have `zone: "None"`.
+- A refused PATCH makes the CC answer HTTP 400 "JSON content does not
+  conform to JSON Schema." followed by every schema it accepts for that URI
+  (useful for probing). For `PATCH api/rooms/{id}` (Ole's CC, firmware
+  4.2.1724, 2026-11-03) there are two, both `additionalProperties: false`:
+  1. "with support for changed setpoint": `id` (required), `setpoint`
+     `{temperature}`, `schedule`;
+  2. "with support for changed regulationtype and -setpoint": `id`,
+     `regulation` `{type: Schedule|Manual, atHomeSetpoint, awaySetpoint,
+     manualSetpoint}`, `schedule`.
+  Schedule periods only allow `AtHome` / `Away`, `HH:MM:SS` starts and
+  `HH:MM:SS` or `1.00:00:00` ends, at least one period per day. So
+  `{"id": 7, "zone": "None"}` on a room is refused: membership cannot be
+  changed on the room.
+- The schema for `PATCH api/zones/living` (same CC and day) is "Zone":
+  `name` (required), `regulationType` (`Schedule`|`Manual`), `schedule`,
+  `additionalProperties: false`. `{"name": "Living", "rooms": [...]}` is
+  refused. So living zone membership can only be changed on the CC's
+  display. A join/leave action and a dashboard card to add and remove rooms
+  were built and tested live on 2026-11-03, then dropped for this reason;
+  the integration shows membership read-only (Living zone sensor, per-room
+  living zone binary sensor).
+- Ole's CC (firmware 4.2.1724, 2026-11-02) leaves `schedule` out of
+  `GET api/rooms`, but `GET api/rooms/{id}` has it (confirmed live the same
+  day for all 8 rooms, living zone rooms all showing the zone's schedule;
+  `HH:MM:SS` times and `1.00:00:00` parsed as expected). The integration reads each
+  room's schedule from there once at start and then hourly, and logs the
+  detail's keys at debug level when it has no `schedule`.
+- The integration shows a room's schedule read-only as climate attributes:
+  `schedule` maps each weekday to its non-Away periods as `"HH:MM-HH:MM"`
+  (`"1.00:00:00"` shown as `24:00`; states other than AtHome get a suffix,
+  e.g. `asleep`), and `schedule_today` is today's list. "Today" is the CC's
+  weekday when `systemTime` carries an offset, otherwise HA's time zone.
+- The `danfoss_link.set_schedule` action writes days the same way: the
+  given AtHome periods (whole quarters, merged when they overlap) with Away
+  in the gaps; living-zone rooms go to `api/zones/living`. Confirmed live
+  2026-11-02 for a single room and for the living zone (one PATCH per day).
+  Each relay round trip is slow, so the integration now sends all chosen
+  days in one PATCH (`{"schedule": {"monday": [...], "tuesday": [...]}}`)
+  and falls back to one PATCH per day if the CC refuses it. Ole's CC took a
+  two-day PATCH on `api/rooms/3` without the fallback (2026-11-02); the round
+  trip took about 3.6 s. It then updates
+  its cached schedules from what it sent instead of reading every room again.
 - The system-wide schedule (`schedule` / `normalSchedule` in
   `api/system/status`) is a flat period list for today, read-only in the app.
 - On/off devices have their own schedule via `PatchOnOffDeviceRequest`
@@ -280,6 +336,14 @@ GET api/system/status -> {currentState, outdoorTemperature?, schedule, normalSch
 currentState  AtHome | Away | Asleep | Vacation | Pause | Boost | ...
               (app keeps only the part before a comma)
 ```
+
+`outdoorTemperature` is a plain number in °C (Ole's CC, firmware 4.2.1724,
+reported `8.9` on 2026-11-03). Only CCs with an outdoor sensor report it (the
+app's room overview has an "Outdoor" heading, `roomoverview_outdoorheading`;
+the alarm texts tie the sensor to an ECL controller, `ECL_S1` "Outdoor temp.
+is invalid"). The field is optional in `GetSystemStatusResponse`; a CC without
+the sensor is expected to leave it out or send `null`. The integration creates
+its Outdoor temperature sensor only when the first poll returns a number.
 
 A mode is an override. While the CC simply follows its weekly schedule every
 mode is `Inactive` (inferred on Ole's CC, firmware 4.2.1724: HA showed "unknown"
@@ -311,10 +375,95 @@ PUT api/modes/vacation <- {"type": "Vacation", "state": "Inactive"}   (cancel / 
   with a `Z` suffix and read from `startTimeUtc` / `endTimeUtc`; if it ends in
   an offset (`+02:00`), they are CC local time sent without a suffix and read
   from `startTime` / `endTime`. Values outside 1970-2099 mean "no date".
-- Pause takes an optional `endTime` the same way (`S.k.m()`), not used here.
+- Pause takes an optional `endTime` the same way (`S.k.m()`), but no start:
+
+  ```
+  PUT api/modes/pause <- {"type": "Pause", "state": "Active"}                 (until resumed)
+  PUT api/modes/pause <- {"type": "Pause", "state": "Active", "endTime": T}   (until T)
+  PUT api/modes/pause <- {"type": "Pause", "state": "Inactive"}               (resume)
+  ```
+
+  Live on Ole's CC (2026-11-02, firmware 4.2.1724): the timed pause was
+  accepted and read back as `{"type": "Pause", "state": "Active",
+  "startTime": <CC now>, "endTime": T}`, and the CC ended it by itself at T
+  (on its own clock, see below). A `startTime` in the PUT is refused with
+  HTTP 400; the CC's JSON schema for this request (sent with the error) is
+  `additionalProperties: false` with only `type` (enum `Pause`), `state`
+  (enum `Active`) and optional `endTime` (`yyyy-MM-ddTHH:mm:ss`). So the CC
+  cannot plan a pause; the integration keeps a planned pause in Home
+  Assistant and sends the PUT at the start time.
+  Tested live the same evening: a pause planned in Home Assistant for
+  22:11-22:14 started at 22:11 (CC `startTime` 22:11:18 after the drift
+  correction) and the CC ended it by itself at 22:14, back to the schedule.
+
+  The app's pause dialog ("Pause Heating?") has a `pause.activate_1hour_button`
+  ("1 Hour") next to the plain Pause; ending it is "End pause mode and switch
+  to scheduled heating". `api/system/info` has a boolean `limitPauseDuration`
+  (false on Ole's CC); by its name the CC then limits how long a pause may
+  last, which is probably why the app offers the 1-hour pause (inferred from
+  the strings, the code was not decompiled). The rooms hold
+  `api/settings/temperature` `pauseTemperature.setpoint` (min 4, max 10,
+  6 on Ole's CC); the app only reads it.
+- **Mode times are on the CC's clock.** Ole's CC ran 18 minutes fast
+  (`systemTime` 22:11 at 21:53 real time), so a pause sent with
+  `endTime` 22:12 ended at 21:54 real time, after 2 instead of 20 minutes.
+  The integration takes the difference between `systemTime` and Home
+  Assistant's clock on every poll (whole minutes; ignored when more than an
+  hour, which would be a wrong clock rather than drift) and adds it to every
+  time it sends and subtracts it from every time it shows.
 
 The integration exposes this as the `danfoss_link.plan_vacation` and
-`danfoss_link.cancel_vacation` actions plus Vacation start/end sensors.
+`danfoss_link.cancel_vacation` actions plus Vacation start/end sensors, and
+pause as the `danfoss_link.pause` / `cancel_pause` actions (duration or end
+time, optional start kept by Home Assistant), Pause start/end sensors and the
+bundled pause & vacation card.
+
+Live test on Ole's CC (2026-11-02, firmware 4.2.1724, integration 0.3.1), via
+Home Assistant, every change put back afterwards:
+
+- **Manual leaves the AtHome override.** With AtHome active for rooms
+  `[0,2,3,5,6,7,8,9]`, switching a room (or the living zone) to Manual removes
+  it from the mode's `rooms`. Switching back to Schedule does not add it
+  back: after living zone Manual -> Schedule the mode read
+  `rooms: [2], endTime: <end of the current schedule period>`, `currentState`
+  was `Away`, and the living rooms ran their away setpoints while the house
+  mode still said AtHome. Once (rooms left: only a Manual room) the whole
+  AtHome mode ended instead; not yet pinned down when the CC ends it versus
+  trimming it. Ending AtHome and sending it again with every room brings
+  them all back (`endTime` back to `2099-12-31T23:59:59`). Sending only some
+  rooms (re-tested with `[0,2,5,6,7,8,9]`, the Manual bedroom left out) gives
+  `endTime` = the end of the current schedule period, so a partial override
+  ends there; with every room, Manual ones included, it is open-ended. The
+  CC also drops rooms that are already Manual from the list when another room
+  switches to Manual. The integration
+  now does that when it switches rooms back to Schedule, re-selecting At home
+  does it too, and the House mode select shows the covered rooms in an
+  `at_home_rooms` attribute.
+- **`currentState: "Manual"`** is reported while the living zone is on
+  Manual (seen with one other room on Schedule). Rooms on Manual report
+  `state: "Normal"`, `mode: "Manual"`; rooms covered by AtHome report
+  `state: "AtHome"`, `mode: "AtHome"`; rooms following the schedule
+  `state: "Normal"`.
+- **Room on Manual + `setpoint.temperature`** also updates
+  `regulation.manualSetpoint`.
+- **Planning a vacation ends an active AtHome** at once, even with the
+  vacation weeks away. The vacation mode read `state: "Planned"` with the
+  sent `startTime`/`endTime` (CC local time, no suffix, as `systemTime` ends
+  in `+01:00`). Cancelling left every mode Inactive, so AtHome has to be
+  turned on again afterwards.
+- **Pause** (`PUT api/modes/pause` Active) ended AtHome by itself, set every
+  room (Manual ones too) to the pause setpoint (6) with `state: "Pause"`, and
+  `currentState: "Pause"`. Pause -> AtHome (Inactive, then Active with rooms)
+  restored everything.
+- **On/off device on a dead node** (`Gulvtermostat 1`, node-dead alarm since
+  May): `PATCH state: On` was accepted and read back `On` about 30 s later,
+  so the CC stores the state even though the node is gone.
+- **CC clock**: `systemTime` ran about 18 minutes ahead of Home Assistant
+  (mode `startTime` 14:02:54 for a PUT made at 13:44:36), so mode times are
+  in the CC's own clock.
+- A `PEER_NOT_AVAILABLE` relay drop during the test failed one write with
+  "Cannot reach the Danfoss Link CC"; the entities stayed available (the
+  0.3.1 grace period) and the next write went through.
 
 ### Reconstructed protobuf schemas
 

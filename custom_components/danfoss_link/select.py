@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Any
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import (
+    DOMAIN,
     MODE_ACTIVE,
     MODE_AT_HOME,
     MODE_ENDPOINTS,
     MODE_INACTIVE,
+    MODE_PAUSE,
+    MODE_VACATION,
     REGULATION_MANUAL,
     REGULATION_SCHEDULE,
 )
@@ -76,10 +83,79 @@ class DanfossLinkHouseMode(DanfossLinkEntity, SelectEntity):
         active = self._active_type()
         return _OPTIONS[active] if active else _SCHEDULE
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        attrs: dict[str, Any] = {}
+        if (at_home := self.coordinator.active_at_home()) is not None:
+            rooms = self.coordinator.data.rooms
+            # The rooms the "home now" override covers; rooms switched to Manual
+            # drop out of it on the CC.
+            attrs["at_home_rooms"] = [
+                rooms[room_id].get("name") or f"Room {room_id}"
+                for room_id in at_home.get("rooms") or []
+                if room_id in rooms
+            ]
+        data = self.coordinator.data
+        settings = data.temperature_settings
+        # For the pause and vacation card: each mode's state (active, planned
+        # or None), start and end, and the temperature the rooms then hold.
+        for mode_type, key in ((MODE_PAUSE, "pause"), (MODE_VACATION, "vacation")):
+            if not any(m.get("type") == mode_type for m in data.modes):
+                continue
+            state, start_time, end_time = self.coordinator.mode_info(mode_type)
+            attrs[f"{key}_state"] = state
+            attrs[f"{key}_start"] = start_time.isoformat() if start_time else None
+            attrs[f"{key}_end"] = end_time.isoformat() if end_time else None
+            temperature = (settings.get(f"{key}Temperature") or {}).get("setpoint")
+            if temperature is not None:
+                attrs[f"{key}_temperature"] = temperature
+        return attrs or None
+
     async def async_select_option(self, option: str) -> None:
-        target = _TYPES.get(option)
+        await self._async_switch(_TYPES.get(option))
+
+    def _require_pause(self) -> None:
+        if not any(mode.get("type") == MODE_PAUSE for mode in self.coordinator.data.modes):
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="no_pause")
+
+    async def async_pause(self, start: datetime | None, end: datetime | None) -> None:
+        """Pause heating from ``start`` (None: now) until ``end`` (None: until resumed).
+
+        Pausing again while paused moves the end time. The CC cannot plan a
+        pause, so a later start is kept and started by Home Assistant; it
+        replaces an earlier plan.
+        """
+        self._require_pause()
+        if start is not None:
+            await self.coordinator.planned_pause.async_plan(start, end)
+            return
+        await self.coordinator.planned_pause.async_cancel()
+        await self.coordinator.async_start_pause(end)
+
+    async def async_cancel_pause(self) -> None:
+        """End a running pause and cancel a planned one."""
+        self._require_pause()
+        await self.coordinator.planned_pause.async_cancel()
+        if self._active_type() == MODE_PAUSE:
+            await self.coordinator.async_write(
+                "PUT",
+                f"/api/modes/{MODE_ENDPOINTS[MODE_PAUSE]}",
+                {"type": MODE_PAUSE, "state": MODE_INACTIVE},
+            )
+
+    async def _async_switch(self, target: str | None) -> None:
         current = self._active_type()
+        all_rooms = sorted(self.coordinator.data.rooms)
         if current == target:
+            at_home = self.coordinator.active_at_home()
+            if (
+                target == MODE_AT_HOME
+                and at_home is not None
+                and not set(at_home.get("rooms") or []).issuperset(all_rooms)
+            ):
+                # Selecting At home again brings every room back in.
+                await self.coordinator.async_start_at_home(all_rooms, restart=True)
+                await self.coordinator.async_refresh()
             return
         # AtHome is an override too ("home now"); only switching to another
         # mode replaces it, going back to the schedule has to end it.
@@ -92,15 +168,12 @@ class DanfossLinkHouseMode(DanfossLinkEntity, SelectEntity):
         if target is None:
             return
         if target == MODE_AT_HOME:
-            content = {
-                "type": MODE_AT_HOME,
-                "state": MODE_ACTIVE,
-                # The CC requires the list of rooms the mode applies to.
-                "rooms": sorted(self.coordinator.data.rooms),
-            }
-        else:
-            content = {"type": target, "state": MODE_ACTIVE}
-        await self.coordinator.async_write("PUT", f"/api/modes/{MODE_ENDPOINTS[target]}", content)
+            await self.coordinator.async_start_at_home(all_rooms)
+            await self.coordinator.async_refresh()
+            return
+        await self.coordinator.async_write(
+            "PUT", f"/api/modes/{MODE_ENDPOINTS[target]}", {"type": target, "state": MODE_ACTIVE}
+        )
 
 
 class DanfossLinkRoomMode(DanfossLinkRoomEntity, SelectEntity):

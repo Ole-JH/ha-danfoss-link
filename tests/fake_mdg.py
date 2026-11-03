@@ -69,6 +69,51 @@ ROOMS = [
         "state": "Normal",
         "zone": "Living",
         "hasTemperatureSensor": True,
+        "schedule": {
+            day: [
+                {
+                    "startTimeFromMidnight": "00:00:00",
+                    "endTimeFromMidnight": "06:00:00",
+                    "state": "Away",
+                },
+                {
+                    "startTimeFromMidnight": "06:00:00",
+                    "endTimeFromMidnight": "08:00:00",
+                    "state": "AtHome",
+                },
+                {
+                    "startTimeFromMidnight": "08:00:00",
+                    "endTimeFromMidnight": "16:00:00",
+                    "state": "Away",
+                },
+                {
+                    "startTimeFromMidnight": "16:00:00",
+                    "endTimeFromMidnight": "22:30:00",
+                    "state": "AtHome",
+                },
+                {
+                    "startTimeFromMidnight": "22:30:00",
+                    "endTimeFromMidnight": "1.00:00:00",
+                    "state": "Away",
+                },
+            ]
+            for day in ("monday", "tuesday", "wednesday", "thursday", "friday")
+        }
+        | {
+            day: [
+                {
+                    "startTimeFromMidnight": "00:00:00",
+                    "endTimeFromMidnight": "07:30:00",
+                    "state": "Away",
+                },
+                {
+                    "startTimeFromMidnight": "07:30:00",
+                    "endTimeFromMidnight": "1.00:00:00",
+                    "state": "AtHome",
+                },
+            ]
+            for day in ("saturday", "sunday")
+        },
     },
     {
         "id": 1,
@@ -104,7 +149,8 @@ def initial_state() -> dict[str, Any]:
              "titleTextId": "IDS_UA1_ALERTVIEWER_BATTERY_LOW_ALERT",
              "createdDate": "2026-10-01T10:00:00"},
         ],
-        "/api/settings/temperature": {"vacationTemperature": {"setpoint": 15.0}},
+        "/api/settings/temperature": {"vacationTemperature": {"setpoint": 15.0},
+                                       "pauseTemperature": {"setpoint": 6.0}},
     }  # fmt: skip
 
 
@@ -391,11 +437,28 @@ class FakeMDG:
         body = json.dumps(message).encode()
         tls.sendall(struct.pack(">H", len(body)) + body)
 
+    def _drop_from_at_home(self, room_ids: list[int]) -> None:
+        # As seen on a real CC: a room switched to Manual leaves an active
+        # AtHome override and does not come back on Schedule.
+        for mode in self.state["/api/modes"]:
+            if mode["type"] == "AtHome" and mode["state"] == "Active":
+                mode["rooms"] = [r for r in mode.get("rooms", []) if r not in room_ids]
+
     def _handle(self, method: str, uri: str, content: Any) -> tuple[int, Any]:
         self.requests.append((method, uri, content))
         if method != "GET" and self.reject_writes:
             return 400, {"errorMessages": ["JSON content does not conform to JSON Schema."]}
         if method == "GET":
+            # Like a real CC: the room list leaves out schedules, the room itself has it.
+            if uri == "/api/rooms":
+                return 200, [
+                    {k: v for k, v in room.items() if k != "schedule"} for room in self.state[uri]
+                ]
+            if uri.startswith("/api/rooms/"):
+                room_id = uri.removeprefix("/api/rooms/")
+                for room in self.state["/api/rooms"]:
+                    if str(room["id"]) == room_id:
+                        return 200, room
             if uri in self.state:
                 return 200, self.state[uri]
             return 404, {"errorMessages": ["Not found"]}
@@ -416,12 +479,23 @@ class FakeMDG:
                             room.setdefault(key, {}).update(value)
                         else:
                             room[key] = value
+                    if content.get("regulation", {}).get("type") == "Manual":
+                        self._drop_from_at_home([room["id"]])
             return 200, None
         if method == "PATCH" and uri == "/api/zones/living":
             for room in self.state["/api/rooms"]:
                 if room.get("zone") == "Living" and "regulationType" in content:
                     room["regulation"]["type"] = content["regulationType"]
+                if room.get("zone") == "Living" and "schedule" in content:
+                    room.setdefault("schedule", {}).update(content["schedule"])
+            if content.get("regulationType") == "Manual":
+                self._drop_from_at_home(
+                    [r["id"] for r in self.state["/api/rooms"] if r.get("zone") == "Living"]
+                )
             return 200, None
+        if method == "PUT" and uri == "/api/modes/pause" and "startTime" in content:
+            # The real CC's schema for Pause allows only type, state and endTime.
+            return 400, {"errorMessages": ["JSON content does not conform to JSON Schema."]}
         if method == "PUT" and uri.startswith("/api/modes/"):
             for mode in self.state["/api/modes"]:
                 if mode["type"] == content["type"]:

@@ -14,9 +14,10 @@ from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import REGULATION_MANUAL, REGULATION_SCHEDULE
+from .const import REGULATION_MANUAL, REGULATION_SCHEDULE, ZONE_LIVING
 from .coordinator import DanfossLinkConfigEntry, DanfossLinkCoordinator
 from .entity import DanfossLinkRoomEntity
+from .schedule import build_day, schedule_attributes
 
 PARALLEL_UPDATES = 1
 
@@ -89,6 +90,7 @@ class DanfossLinkRoomClimate(DanfossLinkRoomEntity, ClimateEntity):
             "away_setpoint": regulation.get("awaySetpoint"),
             "manual_setpoint": regulation.get("manualSetpoint"),
             "zone": room.get("zone"),
+            **schedule_attributes(room, self.coordinator.data.info),
         }
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
@@ -100,6 +102,21 @@ class DanfossLinkRoomClimate(DanfossLinkRoomEntity, ClimateEntity):
             self.room_uri,
             {"id": self.room_id, "setpoint": {"temperature": float(temperature)}},
         )
+
+    async def async_set_schedule(self, days: list[str], periods: list[tuple[int, int]]) -> None:
+        """Replace these weekdays' schedule: at home in the periods, away the rest."""
+        day = build_day(periods)
+        week = {name: day for name in days}
+        if self.room.get("zone") == ZONE_LIVING:
+            # Living-zone rooms share one schedule, set on the zone as the app does.
+            rooms = self.coordinator.living_zone_rooms()
+            await self.coordinator.async_write_schedule(
+                "/api/zones/living", {"name": ZONE_LIVING}, week, rooms
+            )
+        else:
+            await self.coordinator.async_write_schedule(
+                self.room_uri, {"id": self.room_id}, week, [self.room_id]
+            )
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         await self.async_set_regulation_type(_HVAC_TO_REGULATION[hvac_mode])

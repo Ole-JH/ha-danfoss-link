@@ -129,6 +129,21 @@
       "alarms": {
         "name": "Ulæste alarmer"
       },
+      "house_state": {
+        "name": "Husets status",
+        "state": {
+          "at_home": "Hjemme",
+          "away": "Ude",
+          "asleep": "Sover",
+          "vacation": "Ferie",
+          "pause": "Pause",
+          "boost": "Boost",
+          "manual": "Manuel"
+        }
+      },
+      "outdoor_temperature": {
+        "name": "Udendørstemperatur"
+      },
       "wifi_signal": {
         "name": "Wi-Fi-signal"
       },
@@ -137,6 +152,16 @@
       },
       "vacation_end": {
         "name": "Ferie slutter"
+      },
+      "pause_start": {
+        "name": "Pause starter"
+      },
+      "pause_end": {
+        "name": "Pause slutter"
+      },
+      "living_zone": {
+        "name": "Living Zone",
+        "unit_of_measurement": "rum"
       }
     },
     "binary_sensor": {
@@ -185,6 +210,42 @@
           "description": "Hvilken CC. Kan udelades, hvis du kun har én."
         }
       }
+    },
+    "set_schedule": {
+      "name": "Sæt ugeprogram",
+      "description": "Erstatter ugeprogrammet på de valgte dage: hjemme i de angivne perioder, ude (natsænkning) resten af døgnet. Et rum i Living Zone ændrer programmet for alle rum i zonen.",
+      "fields": {
+        "days": {
+          "name": "Dage",
+          "description": "De ugedage, der skal ændres. De andre dage beholdes."
+        },
+        "at_home": {
+          "name": "Hjemme-perioder",
+          "description": "Perioder som TT:MM-TT:MM i kvarterer, f.eks. 06:00-08:00. Brug 24:00 for midnat sidst på dagen. Lad feltet være tomt for ude hele dagen."
+        }
+      }
+    },
+    "pause": {
+      "name": "Sæt varmen på pause",
+      "description": "Sætter varmen på pause på CC'en: alle rum, også dem på Manuel, holder pausetemperaturen indtil sluttidspunktet, eller til du vælger en anden tilstand for huset. Angiv en start for at planlægge pausen til senere; Home Assistant starter den på det tidspunkt. Angiv en varighed eller et sluttidspunkt, eller ingen af dem for at holde pause, indtil du genoptager. Pauser du igen under en pause, flyttes sluttidspunktet.",
+      "fields": {
+        "start": {
+          "name": "Start",
+          "description": "Planlæg pausen til at starte senere. Udelad for at holde pause nu."
+        },
+        "duration": {
+          "name": "Varighed",
+          "description": "Hvor længe pausen varer, f.eks. 2 timer."
+        },
+        "end": {
+          "name": "Slut",
+          "description": "Hvornår pausen slutter, og CC'en igen følger ugeprogrammet."
+        }
+      }
+    },
+    "cancel_pause": {
+      "name": "Annullér pause",
+      "description": "Afslutter en igangværende pause eller annullerer en planlagt. CC'en følger derefter ugeprogrammet."
     }
   },
   "exceptions": {
@@ -199,6 +260,34 @@
     },
     "not_loaded": {
       "message": "Danfoss Link CC'en er ikke indlæst."
+    },
+    "invalid_period": {
+      "message": "\"{period}\" er ikke en gyldig periode. Brug TT:MM-TT:MM i kvarterer, f.eks. 06:00-08:00."
+    },
+    "no_pause": {
+      "message": "Denne CC har ingen pausetilstand."
+    },
+    "not_house_mode": {
+      "message": "Vælg Danfoss Link-enheden for husets tilstand."
+    },
+    "pause_end_in_past": {
+      "message": "Pausen skal slutte i fremtiden."
+    },
+    "pause_end_before_start": {
+      "message": "Pausen skal slutte efter den starter."
+    }
+  },
+  "selector": {
+    "weekday": {
+      "options": {
+        "monday": "Mandag",
+        "tuesday": "Tirsdag",
+        "wednesday": "Onsdag",
+        "thursday": "Torsdag",
+        "friday": "Fredag",
+        "saturday": "Lørdag",
+        "sunday": "Søndag"
+      }
     }
   }
 }

@@ -7,7 +7,7 @@ from typing import Any
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MANUFACTURER, ZONE_LIVING
+from .const import DOMAIN, MANUFACTURER, REGULATION_SCHEDULE, ZONE_LIVING
 from .coordinator import DanfossLinkCoordinator
 
 # HA 2026.10 replaced `via_device` (identifier tuple) with `via_device_id`
@@ -74,14 +74,32 @@ class DanfossLinkRoomEntity(CoordinatorEntity[DanfossLinkCoordinator]):
 
     async def async_set_regulation_type(self, regulation_type: str) -> None:
         """Switch between Schedule and Manual; living-zone rooms switch as a zone."""
+        coordinator = self.coordinator
         if self.room.get("zone") == ZONE_LIVING:
             # The CC rejects this on a single living-zone room (HTTP 400).
-            await self.coordinator.async_write(
+            rooms = coordinator.living_zone_rooms()
+            await coordinator.async_send(
                 "PATCH",
                 "/api/zones/living",
                 {"name": ZONE_LIVING, "regulationType": regulation_type},
             )
-            return
-        await self.coordinator.async_write(
-            "PATCH", self.room_uri, {"id": self.room_id, "regulation": {"type": regulation_type}}
-        )
+        else:
+            rooms = [self.room_id]
+            await coordinator.async_send(
+                "PATCH",
+                self.room_uri,
+                {"id": self.room_id, "regulation": {"type": regulation_type}},
+            )
+        # Switching to Manual drops the rooms from an active "home now"
+        # override, and the CC does not add them back on Schedule: do that
+        # here, so the rooms follow the house mode again. Send every room, as
+        # the House mode select does: with only some rooms the CC ends the
+        # override at the next schedule period instead of keeping it.
+        at_home = coordinator.active_at_home()
+        if (
+            regulation_type == REGULATION_SCHEDULE
+            and at_home is not None
+            and not set(at_home.get("rooms") or []).issuperset(rooms)
+        ):
+            await coordinator.async_start_at_home(sorted(coordinator.data.rooms), restart=True)
+        await coordinator.async_refresh()

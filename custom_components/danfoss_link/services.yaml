@@ -20,3 +20,54 @@ cancel_vacation:
       selector:
         config_entry:
           integration: danfoss_link
+set_schedule:
+  target:
+    entity:
+      integration: danfoss_link
+      domain: climate
+  fields:
+    days:
+      required: true
+      example: '["monday", "tuesday", "wednesday", "thursday", "friday"]'
+      selector:
+        select:
+          multiple: true
+          translation_key: weekday
+          options:
+            - monday
+            - tuesday
+            - wednesday
+            - thursday
+            - friday
+            - saturday
+            - sunday
+    at_home:
+      required: false
+      example: '["06:00-08:00", "16:00-22:30"]'
+      selector:
+        text:
+          multiple: true
+pause:
+  target:
+    entity:
+      integration: danfoss_link
+      domain: select
+  fields:
+    start:
+      required: false
+      selector:
+        datetime:
+    duration:
+      required: false
+      example: "02:00:00"
+      selector:
+        duration:
+    end:
+      required: false
+      selector:
+        datetime:
+cancel_pause:
+  target:
+    entity:
+      integration: danfoss_link
+      domain: select

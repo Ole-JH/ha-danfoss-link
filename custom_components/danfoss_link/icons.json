@@ -4,6 +4,20 @@
       "mark_alarms_read": {
         "default": "mdi:bell-check"
       }
+    },
+    "sensor": {
+      "pause_end": {
+        "default": "mdi:timer-pause-outline"
+      },
+      "pause_start": {
+        "default": "mdi:timer-pause-outline"
+      },
+      "living_zone": {
+        "default": "mdi:sofa"
+      },
+      "outdoor_temperature": {
+        "default": "mdi:sun-thermometer-outline"
+      }
     }
   },
   "services": {
@@ -12,6 +26,12 @@
     },
     "cancel_vacation": {
       "service": "mdi:airplane-off"
+    },
+    "pause": {
+      "service": "mdi:pause-circle-outline"
+    },
+    "cancel_pause": {
+      "service": "mdi:play-circle-outline"
     }
   }
 }
