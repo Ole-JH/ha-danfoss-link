@@ -102,6 +102,8 @@ Shows whether the heating is paused or on vacation, until when and what is plann
 Pause now for 1, 2, 4 or 8 hours or until you resume, plan a pause or a vacation,
 change or cancel a plan, add an hour to a pause or end it early.
 
+![Pause and vacation card](docs/images/away-card.png)
+
 ```yaml
 type: custom:danfoss-link-away-card
 ```
