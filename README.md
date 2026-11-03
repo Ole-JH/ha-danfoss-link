@@ -76,9 +76,38 @@ Entities marked *disabled by default* can be turned on in the device's entity li
 Home Assistant reads the CC every 60 seconds (configurable down to 20) and sends
 changes right away. Your phone app keeps working alongside it.
 
-Actions for planned vacations, pausing and weekly schedules, the bundled
-schedule, pause & vacation and living zone dashboard cards, the feature comparison with the app and how the modes behave
-are in [docs/features.md](docs/features.md).
+Actions for planned vacations, pausing and weekly schedules, the feature comparison
+with the app and how the modes behave are in [docs/features.md](docs/features.md).
+
+## Dashboard cards
+
+The integration brings its own dashboard cards, with nothing extra to install. Edit a
+dashboard, add a card and search for **Danfoss Link**.
+
+### Schedule card
+
+See and edit each room's weekly schedule. Drag over the grid to paint *at home* or
+*away*, drag down to change several days at once, and press **Save**. Rooms in the
+living zone share one tab, as they share one schedule.
+
+![Schedule card](docs/images/schedule-card.png)
+
+```yaml
+type: custom:danfoss-link-schedule-card
+```
+
+### Pause and vacation card
+
+Shows whether the heating is paused or on vacation, until when and what is planned.
+Pause now for 1, 2, 4 or 8 hours or until you resume, plan a pause or a vacation,
+change or cancel a plan, add an hour to a pause or end it early.
+
+```yaml
+type: custom:danfoss-link-away-card
+```
+
+There is also a **living zone** card. All the card options are in
+[docs/features.md](docs/features.md#schedule-card).
 
 ## How it works
 
