@@ -270,6 +270,29 @@ PATCH api/zones/living <- {"name": ..., "schedule": {...}}   (living zone)
   `api/rooms/{id}`. Sending `regulation.type` to `api/rooms/{id}` for a
   living-zone room fails (seen on Ole's CC): HTTP 400 "Can't change
   regulation type of rooms that are part of the Living Zone".
+- Living zone membership: the app cannot change which rooms are in the
+  living zone. Its only text about it is "You must configure a Living Zone
+  with rooms on the Danfoss Link CC before using the app", and its only
+  zone request is the `PATCH api/zones/living` above (`PatchZoneResponse`;
+  no zone GET). Rooms outside the zone have `zone: "None"`.
+- A refused PATCH makes the CC answer HTTP 400 "JSON content does not
+  conform to JSON Schema." followed by every schema it accepts for that URI
+  (useful for probing). For `PATCH api/rooms/{id}` (Ole's CC, firmware
+  4.2.1724, 2026-11-03) there are two, both `additionalProperties: false`:
+  1. "with support for changed setpoint": `id` (required), `setpoint`
+     `{temperature}`, `schedule`;
+  2. "with support for changed regulationtype and -setpoint": `id`,
+     `regulation` `{type: Schedule|Manual, atHomeSetpoint, awaySetpoint,
+     manualSetpoint}`, `schedule`.
+  Schedule periods only allow `AtHome` / `Away`, `HH:MM:SS` starts and
+  `HH:MM:SS` or `1.00:00:00` ends, at least one period per day. So
+  `{"id": 7, "zone": "None"}` on a room is refused: membership cannot be
+  changed on the room.
+- The schema for `PATCH api/zones/living` (same CC and day) is "Zone":
+  `name` (required), `regulationType` (`Schedule`|`Manual`), `schedule`,
+  `additionalProperties: false`. `{"name": "Living", "rooms": [...]}` is
+  refused. So living zone membership can only be changed on the CC's
+  display; the integration shows it read-only (Living zone sensor and card).
 - Ole's CC (firmware 4.2.1724, 2026-11-02) leaves `schedule` out of
   `GET api/rooms`, but `GET api/rooms/{id}` has it (confirmed live the same
   day for all 8 rooms, living zone rooms all showing the zone's schedule;

@@ -195,7 +195,8 @@ class DanfossLinkLivingZone(DanfossLinkEntity, SensorEntity):
     """Number of rooms in the living zone; the rooms, mode and schedule as attributes.
 
     The living zone's rooms share one Schedule/Manual setting and one weekly
-    schedule. Rooms join or leave with the join/leave_living_zone actions.
+    schedule. Which rooms are in it can only be changed on the CC's display:
+    the CC's PATCH schemas for rooms and for the zone have no such field.
     """
 
     _attr_translation_key = "living_zone"

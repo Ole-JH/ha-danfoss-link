@@ -76,7 +76,7 @@ Entities marked *disabled by default* can be turned on in the device's entity li
 Home Assistant reads the CC every 60 seconds (configurable down to 20) and sends
 changes right away. Your phone app keeps working alongside it.
 
-Actions for planned vacations, pausing, weekly schedules and living zone rooms, the bundled
+Actions for planned vacations, pausing and weekly schedules, the bundled
 schedule, pause & vacation and living zone dashboard cards, the feature comparison with the app and how the modes behave
 are in [docs/features.md](docs/features.md).
 

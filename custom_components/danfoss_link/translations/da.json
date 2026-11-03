@@ -246,14 +246,6 @@
     "cancel_pause": {
       "name": "Annullér pause",
       "description": "Afslutter en igangværende pause eller annullerer en planlagt. CC'en følger derefter ugeprogrammet."
-    },
-    "join_living_zone": {
-      "name": "Tilføj til Living Zone",
-      "description": "Flytter rummene ind i Living Zone. De deler så zonens ugeprogram/manuel-indstilling og ugeprogram; deres egne komfort- og sænketemperaturer bevares."
-    },
-    "leave_living_zone": {
-      "name": "Fjern fra Living Zone",
-      "description": "Tager rummene ud af Living Zone, så hvert rum igen har sin egen ugeprogram/manuel-indstilling og sit eget ugeprogram. Det sidste rum kan ikke fjernes."
     }
   },
   "exceptions": {
@@ -283,12 +275,6 @@
     },
     "pause_end_before_start": {
       "message": "Pausen skal slutte efter den starter."
-    },
-    "living_zone_unchanged": {
-      "message": "Danfoss Link CC flyttede ikke {room} ind i eller ud af Living Zone. Ændr det på CC'ens skærm i stedet."
-    },
-    "living_zone_last_room": {
-      "message": "Living Zone skal have mindst ét rum."
     }
   },
   "selector": {

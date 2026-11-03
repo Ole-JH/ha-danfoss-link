@@ -2,12 +2,12 @@
  * Danfoss Link living zone card.
  *
  * Shows the rooms in the living zone (they share one Schedule/Manual setting
- * and one weekly schedule) with their temperatures, switches the zone between
- * schedule and manual, and moves rooms into or out of the zone.
+ * and one weekly schedule) and the other rooms with their temperatures, and
+ * switches the zone between schedule and manual. Which rooms are in the zone
+ * can only be changed on the CC's display (the CC accepts no such change).
  *
  * Reads the "Living zone" sensor (attributes entity_id, other_entity_id,
- * hvac_mode, schedule_today) and the rooms' climate entities, and uses the
- * danfoss_link.join_living_zone / leave_living_zone actions.
+ * hvac_mode, schedule_today) and the rooms' climate entities.
  *
  * Served and loaded by the integration itself; no separate install.
  */
@@ -21,16 +21,13 @@ const ZONE_TEXT = {
     away_all_day: "Today away all day",
     rooms: "Rooms in the zone",
     others: "Other rooms",
-    add: "Add",
-    remove: "Remove",
-    confirm_remove: "Remove?",
     no_rooms: "No rooms in the living zone.",
     no_others: "All rooms are in the living zone.",
     heating: "Heating",
     working: "Please wait…",
     error: "Could not save",
     no_entity: "No Danfoss Link living zone sensor found. Choose it in the card settings.",
-    last_room: "The living zone needs at least one room.",
+    on_cc: "Rooms are added to or removed from the living zone on the Danfoss Link CC's display.",
   },
   da: {
     title: "Living Zone",
@@ -40,16 +37,13 @@ const ZONE_TEXT = {
     away_all_day: "Ude hele dagen i dag",
     rooms: "Rum i zonen",
     others: "Andre rum",
-    add: "Tilføj",
-    remove: "Fjern",
-    confirm_remove: "Fjern?",
     no_rooms: "Ingen rum i Living Zone.",
     no_others: "Alle rum er i Living Zone.",
     heating: "Varmer",
     working: "Vent venligst…",
     error: "Kunne ikke gemme",
     no_entity: "Fandt ingen Danfoss Link Living Zone-sensor. Vælg den i kortets indstillinger.",
-    last_room: "Living Zone skal have mindst ét rum.",
+    on_cc: "Rum tilføjes til eller fjernes fra Living Zone på Danfoss Link CC'ens skærm.",
   },
 };
 
@@ -66,33 +60,24 @@ function makeLivingZoneCard() {
             selector: { entity: { filter: { domain: "sensor", integration: "danfoss_link" } } },
           },
           { name: "title", selector: { text: {} } },
-          {
-            type: "grid",
-            name: "",
-            schema: [
-              { name: "show_others", selector: { boolean: {} } },
-              { name: "editable", selector: { boolean: {} } },
-            ],
-          },
+          { name: "show_others", selector: { boolean: {} } },
         ],
         computeLabel: (schema) =>
           ({
             entity: "Living zone sensor",
             title: "Title",
             show_others: "Show other rooms",
-            editable: "Allow adding and removing rooms",
           })[schema.name],
       };
     }
 
     static getStubConfig() {
       // No entity: the (first) Danfoss Link living zone sensor.
-      return { show_others: true, editable: true };
+      return { show_others: true };
     }
 
     setConfig(config) {
       this._config = config || {};
-      this._confirm = null;
       this._render();
     }
 
@@ -172,10 +157,11 @@ function makeLivingZoneCard() {
         body = `
           ${members.length ? this._modeHtml(a, busy) : ""}
           <div class="label">${this._t("rooms")}</div>
-          ${members.length ? members.map((m) => this._roomHtml(m, true, members.length, busy)).join("") : `<div class="note">${this._t("no_rooms")}</div>`}
+          ${members.length ? members.map((m) => this._roomHtml(m, true)).join("") : `<div class="note">${this._t("no_rooms")}</div>`}
           ${this._flag("show_others") ? `
             <div class="label others">${this._t("others")}</div>
-            ${others.length ? others.map((m) => this._roomHtml(m, false, members.length, busy)).join("") : `<div class="note">${this._t("no_others")}</div>`}` : ""}`;
+            ${others.length ? others.map((m) => this._roomHtml(m, false)).join("") : `<div class="note">${this._t("no_others")}</div>`}` : ""}
+          ${this._config.show_hint === false ? "" : `<div class="note hint">${this._t("on_cc")}</div>`}`;
       }
       body += `${this._busy ? `<div class="note">${this._t("working")}</div>` : ""}
         ${this._error ? `<div class="error">${this._t("error")}: ${escapeHtml(this._error)}</div>` : ""}`;
@@ -208,28 +194,16 @@ function makeLivingZoneCard() {
       </div>`;
     }
 
-    _roomHtml(entityId, member, memberCount, busy) {
+    _roomHtml(entityId, member) {
       const state = this._hass.states[entityId];
       const a = (state && state.attributes) || {};
       const heating = a.hvac_action === "heating";
       const temps = `${this._temp(a.current_temperature)} <span class="target">→ ${this._temp(a.temperature)}</span>`;
-      let action = "";
-      if (this._flag("editable")) {
-        if (member) {
-          const last = memberCount <= 1;
-          const confirming = this._confirm === entityId;
-          action = `<button class="small leave ${confirming ? "danger" : ""}" data-entity="${entityId}" ${busy} ${last ? `disabled title="${this._t("last_room")}"` : ""}>
-            ${confirming ? this._t("confirm_remove") : this._t("remove")}</button>`;
-        } else {
-          action = `<button class="small join" data-entity="${entityId}" ${busy}>${this._t("add")}</button>`;
-        }
-      }
       return `<div class="room ${member ? "member" : ""}">
         <ha-icon class="${heating ? "heating" : ""}" icon="${heating ? "mdi:radiator" : "mdi:radiator-disabled"}"
           title="${heating ? this._t("heating") : ""}"></ha-icon>
         <div class="name" data-entity="${entityId}">${escapeHtml(this._name(entityId))}</div>
         <div class="temps">${temps}</div>
-        ${action}
       </div>`;
     }
 
@@ -243,17 +217,6 @@ function makeLivingZoneCard() {
         // Any member switches the whole zone.
         this._call("climate", "set_hvac_mode", { hvac_mode: ev.currentTarget.dataset.mode }, members[0]);
       });
-      on(".join", (ev) => this._call("danfoss_link", "join_living_zone", {}, ev.currentTarget.dataset.entity));
-      on(".leave", (ev) => {
-        const entity = ev.currentTarget.dataset.entity;
-        if (this._confirm !== entity) {
-          // Ask once: the room gets its own schedule again.
-          this._confirm = entity;
-          this._render();
-          return;
-        }
-        this._call("danfoss_link", "leave_living_zone", {}, entity);
-      });
       on(".name", (ev) => {
         const event = new Event("hass-more-info", { bubbles: true, composed: true });
         event.detail = { entityId: ev.currentTarget.dataset.entity };
@@ -264,7 +227,6 @@ function makeLivingZoneCard() {
     async _call(domain, service, data, entityId) {
       this._busy = true;
       this._error = null;
-      this._confirm = null;
       this._render();
       try {
         await this._hass.callService(domain, service, data, { entity_id: entityId });
@@ -298,12 +260,11 @@ const ZONE_STYLE = `
   .room:not(.member) .name { color: var(--secondary-text-color); }
   .room .temps { white-space: nowrap; font-variant-numeric: tabular-nums; }
   .room .target { color: var(--secondary-text-color); font-size: 0.9em; }
+  .hint { margin-top: 14px; }
   .note { margin-top: 6px; font-size: 0.85em; color: var(--secondary-text-color); }
   .error { margin-top: 10px; color: var(--error-color, #db4437); font-size: 0.9em; }
   button { font: inherit; font-weight: 500; border-radius: 18px; padding: 6px 16px; cursor: pointer;
            border: 1px solid var(--divider-color, #ccc); background: none; color: var(--primary-color); }
-  button.small { padding: 3px 10px; font-size: 0.85em; flex: none; }
-  button.danger { color: var(--error-color, #db4437); border-color: var(--error-color, #db4437); }
   button[disabled] { opacity: 0.5; cursor: default; }
 `;
 
@@ -320,7 +281,7 @@ function registerLivingZoneCard() {
   window.customCards.push({
     type: "danfoss-link-living-zone-card",
     name: "Danfoss Link living zone",
-    description: "See and change which rooms are in the living zone, and its mode.",
+    description: "The living zone's rooms with their temperatures, and its schedule or manual mode.",
     preview: true,
   });
 }

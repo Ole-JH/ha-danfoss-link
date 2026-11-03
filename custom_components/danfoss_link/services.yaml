@@ -71,13 +71,3 @@ cancel_pause:
     entity:
       integration: danfoss_link
       domain: select
-join_living_zone:
-  target:
-    entity:
-      integration: danfoss_link
-      domain: climate
-leave_living_zone:
-  target:
-    entity:
-      integration: danfoss_link
-      domain: climate

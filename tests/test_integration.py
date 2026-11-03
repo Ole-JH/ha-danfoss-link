@@ -284,11 +284,7 @@ async def test_living_zone_sensor(hass: HomeAssistant, fake: FakeMDG) -> None:
 LIVING_ZONE = "sensor.my_home_living_zone"
 
 
-def _zone_writes(fake: FakeMDG) -> list:
-    return [r for r in fake.requests if r[0] == "PATCH" and "rooms" in (r[2] or {})]
-
-
-async def test_living_zone_members(hass: HomeAssistant, fake: FakeMDG) -> None:
+async def test_living_zone(hass: HomeAssistant, fake: FakeMDG) -> None:
     await _setup(hass)
     zone = hass.states.get(LIVING_ZONE)
     assert zone.state == "1"
@@ -299,82 +295,24 @@ async def test_living_zone_members(hass: HomeAssistant, fake: FakeMDG) -> None:
     assert zone.attributes["hvac_mode"] == "auto"
     assert zone.attributes["schedule"]["monday"] == ["06:00-08:00", "16:00-22:30"]
 
-
-async def test_join_and_leave_living_zone(hass: HomeAssistant, fake: FakeMDG) -> None:
-    await _setup(hass)
-    detail_reads = fake.requests.count(("GET", "/api/rooms/0", None))
+    # Switching a member to Manual switches the zone, and the sensor follows.
     await hass.services.async_call(
-        DOMAIN, "join_living_zone", {}, target={ATTR_ENTITY_ID: "climate.bathroom"}, blocking=True
+        CLIMATE_DOMAIN,
+        SERVICE_SET_HVAC_MODE,
+        {ATTR_ENTITY_ID: "climate.living_room", ATTR_HVAC_MODE: HVACMode.HEAT},
+        blocking=True,
     )
-    assert _zone_writes(fake) == [
-        ("PATCH", "/api/zones/living", {"name": "Living", "rooms": [0, 1]})
-    ]
-    # A room that joins takes the zone's schedule, so schedules are read again.
-    assert fake.requests.count(("GET", "/api/rooms/0", None)) == detail_reads + 1
+    await hass.async_block_till_done()
+    assert hass.states.get(LIVING_ZONE).attributes["hvac_mode"] == "heat"
+
+    # Membership is set on the CC's display; the sensor follows the next poll.
+    fake.state["/api/rooms"][1]["zone"] = "Living"
+    await hass.config_entries.async_entries(DOMAIN)[0].runtime_data.async_refresh()
     await hass.async_block_till_done()
     zone = hass.states.get(LIVING_ZONE)
     assert zone.state == "2"
     assert zone.attributes["entity_id"] == ["climate.living_room", "climate.bathroom"]
     assert zone.attributes["other_entity_id"] == []
-    assert hass.states.get("binary_sensor.bathroom_living_zone").state == "on"
-
-    # Joining again sends nothing.
-    await hass.services.async_call(
-        DOMAIN, "join_living_zone", {}, target={ATTR_ENTITY_ID: "climate.bathroom"}, blocking=True
-    )
-    assert len(_zone_writes(fake)) == 1
-
-    await hass.services.async_call(
-        DOMAIN,
-        "leave_living_zone",
-        {},
-        target={ATTR_ENTITY_ID: "climate.living_room"},
-        blocking=True,
-    )
-    assert _zone_writes(fake)[-1] == (
-        "PATCH",
-        "/api/zones/living",
-        {"name": "Living", "rooms": [1]},
-    )
-    await hass.async_block_till_done()
-    assert hass.states.get(LIVING_ZONE).attributes["rooms"] == ["Bathroom"]
-    assert hass.states.get("binary_sensor.living_room_living_zone").state == "off"
-
-
-async def test_last_room_cannot_leave_living_zone(hass: HomeAssistant, fake: FakeMDG) -> None:
-    await _setup(hass)
-    with pytest.raises(ServiceValidationError) as err:
-        await hass.services.async_call(
-            DOMAIN,
-            "leave_living_zone",
-            {},
-            target={ATTR_ENTITY_ID: "climate.living_room"},
-            blocking=True,
-        )
-    assert err.value.translation_key == "living_zone_last_room"
-    assert _zone_writes(fake) == []
-
-
-async def test_living_zone_change_refused_by_cc(hass: HomeAssistant, fake: FakeMDG) -> None:
-    await _setup(hass)
-    original = fake._handle
-
-    def refuse_rooms(method, uri, content):
-        if method == "PATCH" and "rooms" in (content or {}):
-            return 400, {"errorMessages": ["JSON content does not conform to JSON Schema."]}
-        return original(method, uri, content)
-
-    fake._handle = refuse_rooms
-    with pytest.raises(HomeAssistantError) as err:
-        await hass.services.async_call(
-            DOMAIN,
-            "join_living_zone",
-            {},
-            target={ATTR_ENTITY_ID: "climate.bathroom"},
-            blocking=True,
-        )
-    assert err.value.translation_key == "living_zone_unchanged"
-    assert hass.states.get(LIVING_ZONE).state == "1"
 
 
 async def test_diagnostic_entities_disabled_by_default(hass: HomeAssistant, fake: FakeMDG) -> None:

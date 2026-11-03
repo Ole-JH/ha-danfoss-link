@@ -22,8 +22,6 @@ REGULATION_SCHEDULE: Final = "Schedule"
 REGULATION_MANUAL: Final = "Manual"
 # Rooms in this zone share one regulation type and schedule, set on the zone.
 ZONE_LIVING: Final = "Living"
-# Rooms outside the living zone.
-ZONE_NONE: Final = "None"
 
 # House modes and their REST endpoints (/api/modes/<endpoint>)
 MODE_AT_HOME: Final = "AtHome"
