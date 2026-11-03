@@ -15,6 +15,7 @@
 | `sensor` unread alarms | CC | Count plus details (low battery, lost device, ...) |
 | `button` mark alarms as read | CC | Marks every unread alarm as read, as opening it in the app does |
 | `binary_sensor` living zone | room | On when the room is in the living zone. Its rooms share one Schedule/Manual mode and one schedule, so changing one changes all. |
+| `sensor` living zone | CC | Number of rooms in the living zone; attributes list the rooms (`rooms`, `entity_id`), the other rooms (`other_entity_id`), the zone's mode (`hvac_mode`) and schedule |
 | `binary_sensor` battery | room | Low battery on a device in the room, from the CC's alarms. *Disabled by default.* |
 | `binary_sensor` radio connection | room | Off when the CC has lost contact with a device in the room. *Disabled by default.* |
 | `sensor` outdoor temperature | CC | Outdoor temperature. Only created if the CC reports one; not every setup has an outdoor sensor. |
@@ -129,6 +130,36 @@ show_vacation: true
 durations: [1, 2, 4, 8]             # quick pause choices, in hours
 ```
 
+## Living zone
+
+The rooms in the living zone share one Schedule/Manual setting and one weekly
+schedule; each keeps its own comfort and away temperatures. The **Living
+zone** sensor on the CC shows which rooms are in it. Move a room in or out
+with the **Join living zone** / **Leave living zone** actions on its
+thermostat. The Danfoss Link app cannot do this (it sends you to the CC's
+display). The living zone always keeps at least one room.
+
+```yaml
+action: danfoss_link.join_living_zone
+target:
+  entity_id: climate.bathroom
+```
+
+### Living zone card
+
+The **Danfoss Link living zone** card lists the zone's rooms with their
+current and target temperatures, switches the zone between schedule and
+manual, shows today's at home times, and adds or removes rooms (removing asks
+once to confirm). Tap a room's name for its thermostat.
+
+```yaml
+type: custom:danfoss-link-living-zone-card
+# All optional.
+entity: sensor.my_home_living_zone  # default: the (first) Danfoss Link living zone
+show_others: true                   # list the rooms outside the zone
+editable: true                      # show the Add / Remove buttons
+```
+
 Diagnostic entities marked *disabled by default* can be turned on under the
 device's entity list in Home Assistant.
 
@@ -145,7 +176,8 @@ How the integration compares with the Danfoss Link app (1.3.x).
 | Room temperature and target temperature | ✅ | `climate` entity and temperature sensor |
 | Schedule / Manual per room | ✅ | Thermostat Auto/Heat and the room's Mode select |
 | At-home / away temperatures | ✅ | Number entities per room |
-| Living zone (shared mode for its rooms) | ✅ | Mode changes are sent to the whole zone |
+| Living zone (shared mode for its rooms) | ✅ | Mode changes are sent to the whole zone; living zone sensor and card |
+| Change which rooms are in the living zone | ✅ | Not in the app (only on the CC); `join_living_zone` / `leave_living_zone` actions and the living zone card |
 | House modes: at home, vacation, pause, boost | ✅ | House mode select and house state sensor |
 | Pause with an end time, planned pause | ✅ | `pause` / `cancel_pause` actions and the pause & vacation card |
 | Vacation temperature | ✅ | Number entity |

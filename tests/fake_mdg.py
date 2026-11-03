@@ -482,6 +482,10 @@ class FakeMDG:
                     if content.get("regulation", {}).get("type") == "Manual":
                         self._drop_from_at_home([room["id"]])
             return 200, None
+        if method == "PATCH" and uri == "/api/zones/living" and "rooms" in content:
+            for room in self.state["/api/rooms"]:
+                room["zone"] = "Living" if room["id"] in content["rooms"] else "None"
+            return 200, None
         if method == "PATCH" and uri == "/api/zones/living":
             for room in self.state["/api/rooms"]:
                 if room.get("zone") == "Living" and "regulationType" in content:

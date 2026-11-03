@@ -66,6 +66,7 @@ it in an area.
 | `sensor` unread alarms | CC | Count plus details (low battery, lost device, ...) |
 | `button` mark alarms as read | CC | Marks every unread alarm as read, as opening it in the app does |
 | `binary_sensor` living zone | room | On when the room is in the living zone. Its rooms share one Schedule/Manual mode and one schedule, so changing one changes all. |
+| `sensor` living zone | CC | How many rooms are in the living zone, with the rooms, the zone's mode and schedule as attributes |
 | `binary_sensor` battery | room | Low battery on a device in the room, from the CC's alarms. *Disabled by default.* |
 | `binary_sensor` radio connection | room | Off when the CC has lost contact with a device in the room. *Disabled by default.* |
 | `sensor` outdoor temperature | CC | Outdoor temperature. Only created if the CC reports one; not every setup has an outdoor sensor. |
@@ -75,8 +76,8 @@ Entities marked *disabled by default* can be turned on in the device's entity li
 Home Assistant reads the CC every 60 seconds (configurable down to 20) and sends
 changes right away. Your phone app keeps working alongside it.
 
-Actions for planned vacations, pausing and weekly schedules, the bundled schedule and
-pause & vacation dashboard cards, the feature comparison with the app and how the modes behave
+Actions for planned vacations, pausing, weekly schedules and living zone rooms, the bundled
+schedule, pause & vacation and living zone dashboard cards, the feature comparison with the app and how the modes behave
 are in [docs/features.md](docs/features.md).
 
 ## How it works

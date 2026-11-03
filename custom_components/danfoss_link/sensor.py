@@ -15,7 +15,7 @@ from homeassistant.const import (
     EntityCategory,
     UnitOfTemperature,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -202,6 +202,20 @@ class DanfossLinkLivingZone(DanfossLinkEntity, SensorEntity):
 
     def __init__(self, coordinator: DanfossLinkCoordinator) -> None:
         super().__init__(coordinator, "living_zone")
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+
+        # The climate entities may be registered after this sensor (or
+        # renamed): show their entity ids once they are known.
+        @callback
+        def _climate_changed(event: Event[er.EventEntityRegistryUpdatedData]) -> None:
+            if event.data["entity_id"].startswith("climate."):
+                self.async_write_ha_state()
+
+        self.async_on_remove(
+            self.hass.bus.async_listen(er.EVENT_ENTITY_REGISTRY_UPDATED, _climate_changed)
+        )
 
     @property
     def native_value(self) -> int:

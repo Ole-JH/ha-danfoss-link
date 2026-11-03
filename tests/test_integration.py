@@ -285,7 +285,7 @@ LIVING_ZONE = "sensor.my_home_living_zone"
 
 
 def _zone_writes(fake: FakeMDG) -> list:
-    return [r for r in fake.requests if r[0] == "PATCH" and "zone" in (r[2] or {})]
+    return [r for r in fake.requests if r[0] == "PATCH" and "rooms" in (r[2] or {})]
 
 
 async def test_living_zone_members(hass: HomeAssistant, fake: FakeMDG) -> None:
@@ -306,7 +306,9 @@ async def test_join_and_leave_living_zone(hass: HomeAssistant, fake: FakeMDG) ->
     await hass.services.async_call(
         DOMAIN, "join_living_zone", {}, target={ATTR_ENTITY_ID: "climate.bathroom"}, blocking=True
     )
-    assert _zone_writes(fake) == [("PATCH", "/api/rooms/1", {"id": 1, "zone": "Living"})]
+    assert _zone_writes(fake) == [
+        ("PATCH", "/api/zones/living", {"name": "Living", "rooms": [0, 1]})
+    ]
     # A room that joins takes the zone's schedule, so schedules are read again.
     assert fake.requests.count(("GET", "/api/rooms/0", None)) == detail_reads + 1
     await hass.async_block_till_done()
@@ -329,7 +331,11 @@ async def test_join_and_leave_living_zone(hass: HomeAssistant, fake: FakeMDG) ->
         target={ATTR_ENTITY_ID: "climate.living_room"},
         blocking=True,
     )
-    assert _zone_writes(fake)[-1] == ("PATCH", "/api/rooms/0", {"id": 0, "zone": "None"})
+    assert _zone_writes(fake)[-1] == (
+        "PATCH",
+        "/api/zones/living",
+        {"name": "Living", "rooms": [1]},
+    )
     await hass.async_block_till_done()
     assert hass.states.get(LIVING_ZONE).attributes["rooms"] == ["Bathroom"]
     assert hass.states.get("binary_sensor.living_room_living_zone").state == "off"
@@ -349,16 +355,16 @@ async def test_last_room_cannot_leave_living_zone(hass: HomeAssistant, fake: Fak
     assert _zone_writes(fake) == []
 
 
-async def test_living_zone_change_ignored_by_cc(hass: HomeAssistant, fake: FakeMDG) -> None:
+async def test_living_zone_change_refused_by_cc(hass: HomeAssistant, fake: FakeMDG) -> None:
     await _setup(hass)
     original = fake._handle
 
-    def ignore_zone(method, uri, content):
-        if method == "PATCH" and isinstance(content, dict):
-            content = {k: v for k, v in content.items() if k != "zone"}
+    def refuse_rooms(method, uri, content):
+        if method == "PATCH" and "rooms" in (content or {}):
+            return 400, {"errorMessages": ["JSON content does not conform to JSON Schema."]}
         return original(method, uri, content)
 
-    fake._handle = ignore_zone
+    fake._handle = refuse_rooms
     with pytest.raises(HomeAssistantError) as err:
         await hass.services.async_call(
             DOMAIN,

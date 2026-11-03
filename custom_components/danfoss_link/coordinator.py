@@ -25,7 +25,6 @@ from .const import (
     MODE_PAUSE,
     MODE_PLANNED,
     ZONE_LIVING,
-    ZONE_NONE,
 )
 from .planned_pause import PlannedPause
 
@@ -261,21 +260,44 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
     async def async_set_living_zone(self, room_id: int, member: bool) -> None:
         """Move a room into or out of the living zone.
 
-        The app has no way to do this (it tells users to set up the living
-        zone on the CC). The CC takes ``zone`` on ``PATCH api/rooms/{id}``
-        like any other room field; check that it really changed.
+        The app cannot do this (it sends users to the CC's display), and the
+        CC's schemas for PATCH api/rooms/{id} only allow id, setpoint,
+        regulation and schedule. Try the zone itself with its new room list,
+        as the AtHome mode lists rooms, and check that it changed.
         """
-        zone = ZONE_LIVING if member else ZONE_NONE
-        await self.async_send("PATCH", f"/api/rooms/{room_id}", {"id": room_id, "zone": zone})
-        # A room that joins takes the zone's schedule: read schedules again.
-        self._schedules_fetched = None
-        await self.async_refresh()
-        room = self.data.rooms.get(room_id, {})
-        if room.get("zone") != zone:
+        rooms = [r for r in self.living_zone_rooms() if r != room_id]
+        if member:
+            rooms.append(room_id)
+        content = {"name": ZONE_LIVING, "rooms": sorted(rooms)}
+        _LOGGER.debug("PATCH /api/zones/living %s", content)
+        name = self.data.rooms.get(room_id, {}).get("name") or str(room_id)
+        try:
+            await self._call(self.client.request, "PATCH", "/api/zones/living", content)
+        except RequestError as err:
+            # The CC answers with its JSON schemas: keep them for the docs.
+            _LOGGER.warning(
+                "The Danfoss Link CC refused to change the living zone (HTTP %s): %s",
+                err.status,
+                err.content,
+            )
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="living_zone_unchanged",
-                translation_placeholders={"room": room.get("name") or str(room_id)},
+                translation_placeholders={"room": name},
+            ) from err
+        except CannotConnect as err:
+            raise HomeAssistantError(f"Cannot reach the Danfoss Link CC: {err}") from err
+        except DanfossLinkError as err:
+            raise HomeAssistantError(str(err)) from err
+        # A room that joins takes the zone's schedule: read schedules again.
+        self._schedules_fetched = None
+        await self.async_refresh()
+        zone = self.data.rooms.get(room_id, {}).get("zone")
+        if (zone == ZONE_LIVING) != member:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="living_zone_unchanged",
+                translation_placeholders={"room": name},
             )
 
     def active_at_home(self) -> dict[str, Any] | None:
