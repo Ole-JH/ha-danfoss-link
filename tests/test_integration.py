@@ -8,6 +8,7 @@ import functools
 import json
 from pathlib import Path
 import shutil
+from typing import Any
 from unittest.mock import PropertyMock, patch
 
 from homeassistant.components import persistent_notification
@@ -606,6 +607,40 @@ async def test_house_state_manual(hass: HomeAssistant, fake: FakeMDG) -> None:
     fake.state["/api/system/status"] = {"currentState": "Manual"}
     await _setup(hass)
     assert hass.states.get("sensor.my_home_house_state").state == "manual"
+
+
+async def test_outdoor_temperature(hass: HomeAssistant, fake: FakeMDG) -> None:
+    fake.state["/api/system/status"] = {"currentState": "AtHome", "outdoorTemperature": 8.9}
+    entry = await _setup(hass)
+    state = hass.states.get("sensor.my_home_outdoor_temperature")
+    assert state.state == "8.9"
+    assert state.attributes["device_class"] == "temperature"
+    assert state.attributes["unit_of_measurement"] == "°C"
+
+    fake.state["/api/system/status"]["outdoorTemperature"] = -3.5
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.my_home_outdoor_temperature").state == "-3.5"
+
+    # A sensor that stops answering shows as unknown, not as a stale value.
+    fake.state["/api/system/status"]["outdoorTemperature"] = None
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.my_home_outdoor_temperature").state == "unknown"
+
+
+@pytest.mark.parametrize(
+    "status",
+    [{"currentState": "AtHome"}, {"currentState": "AtHome", "outdoorTemperature": None}],
+)
+async def test_no_outdoor_temperature(
+    hass: HomeAssistant, fake: FakeMDG, status: dict[str, Any]
+) -> None:
+    """No outdoor sensor on the CC: no outdoor temperature entity."""
+    fake.state["/api/system/status"] = status
+    await _setup(hass)
+    assert hass.states.get("sensor.my_home_outdoor_temperature") is None
+    assert hass.states.get("sensor.my_home_house_state") is not None
 
 
 async def test_switch_unavailable_while_node_dead(hass: HomeAssistant, fake: FakeMDG) -> None:

@@ -41,6 +41,9 @@ async def async_setup_entry(
     entities.append(DanfossLinkAlarms(coordinator))
     if coordinator.data.status.get("currentState"):
         entities.append(DanfossLinkHouseState(coordinator))
+    # Only CCs with an outdoor sensor (e.g. via an ECL controller) report it.
+    if isinstance(coordinator.data.status.get("outdoorTemperature"), (int, float)):
+        entities.append(DanfossLinkOutdoorTemperature(coordinator))
     for mode_type in (MODE_VACATION, MODE_PAUSE):
         if any(mode.get("type") == mode_type for mode in coordinator.data.modes):
             entities.extend(
@@ -66,6 +69,23 @@ class DanfossLinkRoomTemperature(DanfossLinkRoomEntity, SensorEntity):
     @property
     def native_value(self) -> float | None:
         return self.room.get("ambientTemperature")
+
+
+class DanfossLinkOutdoorTemperature(DanfossLinkEntity, SensorEntity):
+    """Outdoor temperature (/api/system/status outdoorTemperature)."""
+
+    _attr_translation_key = "outdoor_temperature"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+
+    def __init__(self, coordinator: DanfossLinkCoordinator) -> None:
+        super().__init__(coordinator, "outdoor_temperature")
+
+    @property
+    def native_value(self) -> float | None:
+        value = self.coordinator.data.status.get("outdoorTemperature")
+        return value if isinstance(value, (int, float)) else None
 
 
 # CC system state (/api/system/status currentState) -> option key

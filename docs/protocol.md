@@ -311,6 +311,14 @@ currentState  AtHome | Away | Asleep | Vacation | Pause | Boost | ...
               (app keeps only the part before a comma)
 ```
 
+`outdoorTemperature` is a plain number in °C (Ole's CC, firmware 4.2.1724,
+reported `8.9` on 2026-11-03). Only CCs with an outdoor sensor report it (the
+app's room overview has an "Outdoor" heading, `roomoverview_outdoorheading`;
+the alarm texts tie the sensor to an ECL controller, `ECL_S1` "Outdoor temp.
+is invalid"). The field is optional in `GetSystemStatusResponse`; a CC without
+the sensor is expected to leave it out or send `null`. The integration creates
+its Outdoor temperature sensor only when the first poll returns a number.
+
 A mode is an override. While the CC simply follows its weekly schedule every
 mode is `Inactive` (inferred on Ole's CC, firmware 4.2.1724: HA showed "unknown"
 while the app showed "At Home"). The "At Home" text in the app's dial is

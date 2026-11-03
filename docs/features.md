@@ -17,6 +17,7 @@
 | `binary_sensor` living zone | room | On when the room is in the living zone. Its rooms share one Schedule/Manual mode and one schedule, so changing one changes all. |
 | `binary_sensor` battery | room | Low battery on a device in the room, from the CC's alarms. *Disabled by default.* |
 | `binary_sensor` radio connection | room | Off when the CC has lost contact with a device in the room. *Disabled by default.* |
+| `sensor` outdoor temperature | CC | Outdoor temperature. Only created if the CC reports one; not every setup has an outdoor sensor. |
 | `sensor` Wi-Fi signal | CC | The CC's Wi-Fi signal strength. *Disabled by default.* Only created if the CC reports it; firmware 4.2.1797 does not. |
 
 ## Planned vacation
@@ -156,7 +157,7 @@ How the integration compares with the Danfoss Link app (1.3.x).
 | Pair a new app with a CC code | ✅ | Config flow (cloud pairing codes only) |
 | Weekly schedules (rooms, living zone) | ✅ | Shown as thermostat attributes, changed with the `set_schedule` action |
 | Schedules for on/off devices | ❌ | Not yet |
-| Outdoor temperature | ❌ | Not yet |
+| Outdoor temperature | ✅ | Sensor, only on CCs that have an outdoor sensor |
 | Pause temperature, floor heating limit | ❌ | The app only reads these; not planned |
 | Firmware update | ❌ | Not planned: a failed update could leave the CC unreachable |
 | LAN pairing (`0000` codes) | ❌ | Not supported |

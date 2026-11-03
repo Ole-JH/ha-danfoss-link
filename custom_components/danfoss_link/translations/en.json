@@ -141,6 +141,9 @@
           "manual": "Manual"
         }
       },
+      "outdoor_temperature": {
+        "name": "Outdoor temperature"
+      },
       "wifi_signal": {
         "name": "Wi-Fi signal"
       },
