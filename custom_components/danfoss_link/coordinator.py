@@ -94,7 +94,7 @@ class DanfossLinkData:
 class PendingSetpoint:
     """A room setpoint set in Home Assistant that the CC has not confirmed yet."""
 
-    temperature: float
+    value: float
     # When the CC accepted it; None while it is still waiting to be sent.
     sent_at: datetime | None = None
 
@@ -131,9 +131,10 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
         # room id -> weekly schedule from api/rooms/{id}, and when it was read.
         self._schedules: dict[int, dict[str, Any]] = {}
         self._schedules_fetched: datetime | None = None
-        # room id -> the setpoint last set from Home Assistant, until the CC shows it.
-        self._setpoints: dict[int, PendingSetpoint] = {}
-        self._setpoint_locks: dict[int, asyncio.Lock] = {}
+        # (room id, section, key) -> a setpoint last set from Home Assistant,
+        # such as ("setpoint", "temperature"), until the CC shows it.
+        self._setpoints: dict[tuple[int, str, str], PendingSetpoint] = {}
+        self._setpoint_locks: dict[tuple[int, str, str], asyncio.Lock] = {}
         self._setpoint_refresh = Debouncer(
             hass,
             _LOGGER,
@@ -274,61 +275,66 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
         self.async_set_updated_data(self.data)
 
     async def async_set_setpoint(self, room_id: int, temperature: float) -> None:
-        """Set a room's setpoint, showing it right away.
+        """Set a room's current setpoint (the climate entity's target)."""
+        await self.async_set_room_value(room_id, "setpoint", "temperature", temperature)
+
+    async def async_set_room_value(
+        self, room_id: int, section: str, key: str, value: float
+    ) -> None:
+        """Set one value of a room, such as its at-home temperature, showing it right away.
 
         +/- on a dashboard sends one call per press (or burst of presses),
-        and each round trip through the relay is slow. So the new setpoint is
+        and each round trip through the relay is slow. So the new value is
         shown at once, a press that a newer one replaced before it was sent
         is dropped, and the CC is read back once the presses stop. Until the
-        CC reports the new setpoint, a poll that still has the old one does
-        not move the display back.
+        CC reports the new value, a poll that still has the old one does not
+        move the display back.
         """
-        pending = PendingSetpoint(temperature)
-        self._setpoints[room_id] = pending
+        slot = (room_id, section, key)
+        pending = PendingSetpoint(value)
+        self._setpoints[slot] = pending
         if self.data is not None:
             self._show_setpoints(self.data.rooms)
             self.async_update_listeners()
-        lock = self._setpoint_locks.setdefault(room_id, asyncio.Lock())
+        lock = self._setpoint_locks.setdefault(slot, asyncio.Lock())
         async with lock:
-            if self._setpoints.get(room_id) is not pending:
-                return  # A newer setpoint came in while waiting; that one is sent.
+            if self._setpoints.get(slot) is not pending:
+                return  # A newer value came in while waiting; that one is sent.
             try:
                 await self._send(
-                    "PATCH",
-                    f"/api/rooms/{room_id}",
-                    {"id": room_id, "setpoint": {"temperature": temperature}},
+                    "PATCH", f"/api/rooms/{room_id}", {"id": room_id, section: {key: value}}
                 )
             except HomeAssistantError:
-                if self._setpoints.get(room_id) is pending:
-                    del self._setpoints[room_id]
+                if self._setpoints.get(slot) is pending:
+                    del self._setpoints[slot]
                 await self._setpoint_refresh.async_call()
                 raise
             pending.sent_at = dt_util.utcnow()
         await self._setpoint_refresh.async_call()
 
     def _show_setpoints(self, rooms: dict[int, dict[str, Any]]) -> None:
-        """Put setpoints set from Home Assistant on rooms read from the CC."""
+        """Put values set from Home Assistant on rooms read from the CC."""
         now = dt_util.utcnow()
-        for room_id, pending in list(self._setpoints.items()):
+        for slot, pending in list(self._setpoints.items()):
+            room_id, section, key = slot
             room = rooms.get(room_id)
             if room is None:
-                del self._setpoints[room_id]
+                del self._setpoints[slot]
                 continue
-            setpoint = room.get("setpoint") or {}
+            values = room.get(section) or {}
             if pending.sent_at is not None and (
-                setpoint.get("temperature") == pending.temperature
-                or now - pending.sent_at >= SETPOINT_HOLD
+                values.get(key) == pending.value or now - pending.sent_at >= SETPOINT_HOLD
             ):
                 # The CC shows it, or kept another value: from now on its value wins.
-                del self._setpoints[room_id]
+                del self._setpoints[slot]
                 continue
-            room["setpoint"] = {**setpoint, "temperature": pending.temperature}
+            room[section] = {**values, key: pending.value}
 
     def forget_setpoints(self) -> None:
         """Stop holding setpoints the CC accepted, as a mode change may replace them."""
-        for room_id, pending in list(self._setpoints.items()):
+        for slot, pending in list(self._setpoints.items()):
             if pending.sent_at is not None:
-                del self._setpoints[room_id]
+                del self._setpoints[slot]
 
     async def async_write(self, method: str, uri: str, content: dict[str, Any]) -> None:
         """Send a change to the CC, then refresh."""

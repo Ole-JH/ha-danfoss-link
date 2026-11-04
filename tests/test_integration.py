@@ -449,6 +449,39 @@ async def test_rapid_setpoint_presses(hass: HomeAssistant, fake: FakeMDG) -> Non
     assert fake.state["/api/rooms"][0]["setpoint"]["temperature"] == 23.0
 
 
+async def test_rapid_at_home_temperature_presses(hass: HomeAssistant, fake: FakeMDG) -> None:
+    """The same for the at-home temperature number (a tile card with +/- buttons)."""
+    await _setup(hass)
+    fake.write_delay = 0.3
+    entity = "number.living_room_at_home_temperature"
+    calls = []
+    for value in (22.5, 23.0, 23.5):
+        calls.append(
+            hass.async_create_task(
+                hass.services.async_call(
+                    NUMBER_DOMAIN,
+                    SERVICE_SET_VALUE,
+                    {ATTR_ENTITY_ID: entity, "value": value},
+                    blocking=True,
+                )
+            )
+        )
+        await asyncio.sleep(0.05)
+        assert float(hass.states.get(entity).state) == value
+    await asyncio.gather(*calls)
+    sent = [
+        content["regulation"]["atHomeSetpoint"]
+        for method, uri, content in fake.requests
+        if method == "PATCH" and uri == "/api/rooms/0" and "regulation" in content
+    ]
+    assert sent == [22.5, 23.5]
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=3))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await hass.async_block_till_done()
+    assert float(hass.states.get(entity).state) == 23.5
+    assert fake.state["/api/rooms"][0]["regulation"]["atHomeSetpoint"] == 23.5
+
+
 async def test_stale_poll_keeps_new_setpoint(hass: HomeAssistant, fake: FakeMDG, freezer) -> None:
     """A poll that still has the old setpoint does not move the display back, for a while."""
     entry = await _setup(hass)

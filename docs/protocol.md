@@ -327,7 +327,13 @@ PATCH api/zones/living <- {"name": ..., "schedule": {...}}   (living zone)
   The integration now shows a new setpoint immediately, drops a press that
   a newer one replaced before it was sent, reads the CC back 2 s after the
   last press, and keeps showing an accepted setpoint for up to 30 s when a
-  poll still reports the old one.
+  poll still reports the old one. The at-home and away temperature numbers
+  (`regulation.atHomeSetpoint` / `awaySetpoint`) work the same way; Ole's
+  report came from a tile card on the at-home number.
+- In Schedule mode a `setpoint.temperature` PATCH changes only the current
+  setpoint: live on Badeværelse (2026-11-04) the CC reported setpoint 21
+  while `atHomeSetpoint` stayed 19. Changing `atHomeSetpoint` while the room
+  is AtHome moves the current setpoint along with it (Soveværelse, same day).
 - The system-wide schedule (`schedule` / `normalSchedule` in
   `api/system/status`) is a flat period list for today, read-only in the app.
 - On/off devices have their own schedule via `PatchOnOffDeviceRequest`
