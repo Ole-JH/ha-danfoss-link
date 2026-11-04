@@ -317,6 +317,17 @@ PATCH api/zones/living <- {"name": ..., "schedule": {...}}   (living zone)
   two-day PATCH on `api/rooms/3` without the fallback (2026-11-02); the round
   trip took about 3.6 s. It then updates
   its cached schedules from what it sent instead of reading every room again.
+- Setpoint changes and relay latency (live, 2026-11-04): HA history for
+  Soveværelse showed one state update every 8 to 10 s while Ole pressed +/-
+  on a tile card, because each `set_temperature` call was a setpoint PATCH
+  followed by a full refresh (system info, rooms and five optional
+  endpoints) before the next call could start. The display walked back to
+  the value of each older press as its refresh landed. A refresh right
+  after the PATCH did show the new setpoint, so the CC applies it at once.
+  The integration now shows a new setpoint immediately, drops a press that
+  a newer one replaced before it was sent, reads the CC back 2 s after the
+  last press, and keeps showing an accepted setpoint for up to 30 s when a
+  poll still reports the old one.
 - The system-wide schedule (`schedule` / `normalSchedule` in
   `api/system/status`) is a flat period list for today, read-only in the app.
 - On/off devices have their own schedule via `PatchOnOffDeviceRequest`

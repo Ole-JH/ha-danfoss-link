@@ -4,6 +4,12 @@ Each release's GitHub release notes are taken from its section below. Add a
 `## <version>` section matching the version in `manifest.json` before the
 release PR to `main` is merged.
 
+## Unreleased
+
+### Fixes
+
+- **Thermostat +/- no longer jumps back.** Pressing + or - several times on a thermostat card now shows each new temperature at once and keeps it. Before, the shown temperature walked back a few steps a few seconds later, because each press waited for its own slow round trip to the Danfoss controller. Only the last press of a quick series is sent, and the controller is read back once you stop.
+
 ## 0.4.0
 
 You can now see and change the weekly schedule, and pause the heating, right from Home Assistant. Two new dashboard cards come with the integration, so there is nothing extra to install.

@@ -19,7 +19,9 @@ from .coordinator import DanfossLinkConfigEntry, DanfossLinkCoordinator
 from .entity import DanfossLinkRoomEntity
 from .schedule import build_day, schedule_attributes
 
-PARALLEL_UPDATES = 1
+# The coordinator serialises all traffic to the CC. Let set_temperature calls
+# in, so a +/- press can replace one that is still waiting to be sent.
+PARALLEL_UPDATES = 0
 
 # AUTO follows the room's weekly schedule, HEAT holds a manual setpoint.
 _HVAC_TO_REGULATION = {HVACMode.AUTO: REGULATION_SCHEDULE, HVACMode.HEAT: REGULATION_MANUAL}
@@ -97,11 +99,7 @@ class DanfossLinkRoomClimate(DanfossLinkRoomEntity, ClimateEntity):
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
-        await self.coordinator.async_write(
-            "PATCH",
-            self.room_uri,
-            {"id": self.room_id, "setpoint": {"temperature": float(temperature)}},
-        )
+        await self.coordinator.async_set_setpoint(self.room_id, float(temperature))
 
     async def async_set_schedule(self, days: list[str], periods: list[tuple[int, int]]) -> None:
         """Replace these weekdays' schedule: at home in the periods, away the rest."""

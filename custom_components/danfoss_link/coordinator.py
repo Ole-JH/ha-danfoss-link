@@ -11,6 +11,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -38,6 +39,13 @@ OUTAGE_RETRY_INTERVAL = timedelta(seconds=15)
 # GET api/rooms leaves out each room's weekly schedule; the app reads it from
 # GET api/rooms/{id}. Schedules rarely change, so fetch them this often.
 SCHEDULE_REFRESH_INTERVAL = timedelta(hours=1)
+# Every round trip through the relay takes a second or more, and a refresh is
+# several of them. After a setpoint change, wait this long for more +/- presses
+# before reading the CC back, so the refresh does not hold up the next change.
+SETPOINT_REFRESH_DELAY = 2.0
+# Show a setpoint the CC accepted for this long even when a poll still reports
+# the old one; after that the CC's value wins.
+SETPOINT_HOLD = timedelta(seconds=30)
 
 # Endpoints that may legitimately be missing on some firmware versions.
 OPTIONAL_ENDPOINTS = {
@@ -82,6 +90,15 @@ class DanfossLinkData:
         return format_cc_time(when, self.info, self.clock_drift)
 
 
+@dataclass
+class PendingSetpoint:
+    """A room setpoint set in Home Assistant that the CC has not confirmed yet."""
+
+    temperature: float
+    # When the CC accepted it; None while it is still waiting to be sent.
+    sent_at: datetime | None = None
+
+
 type DanfossLinkConfigEntry = ConfigEntry[DanfossLinkCoordinator]
 
 
@@ -114,6 +131,16 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
         # room id -> weekly schedule from api/rooms/{id}, and when it was read.
         self._schedules: dict[int, dict[str, Any]] = {}
         self._schedules_fetched: datetime | None = None
+        # room id -> the setpoint last set from Home Assistant, until the CC shows it.
+        self._setpoints: dict[int, PendingSetpoint] = {}
+        self._setpoint_locks: dict[int, asyncio.Lock] = {}
+        self._setpoint_refresh = Debouncer(
+            hass,
+            _LOGGER,
+            cooldown=SETPOINT_REFRESH_DELAY,
+            immediate=False,
+            function=self.async_refresh,
+        )
         # The CC cannot plan a pause, so Home Assistant does.
         self.planned_pause = PlannedPause(
             hass, entry.entry_id, self.async_start_pause, self.async_update_listeners
@@ -137,6 +164,7 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
             )
             self._outage_started = None
             self.update_interval = self._normal_interval
+        self._show_setpoints(data.rooms)
         return data
 
     def _handle_outage(self, err: CannotConnect) -> DanfossLinkData:
@@ -245,9 +273,67 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
                 self.data.rooms[room_id]["schedule"] = schedule
         self.async_set_updated_data(self.data)
 
+    async def async_set_setpoint(self, room_id: int, temperature: float) -> None:
+        """Set a room's setpoint, showing it right away.
+
+        +/- on a dashboard sends one call per press (or burst of presses),
+        and each round trip through the relay is slow. So the new setpoint is
+        shown at once, a press that a newer one replaced before it was sent
+        is dropped, and the CC is read back once the presses stop. Until the
+        CC reports the new setpoint, a poll that still has the old one does
+        not move the display back.
+        """
+        pending = PendingSetpoint(temperature)
+        self._setpoints[room_id] = pending
+        if self.data is not None:
+            self._show_setpoints(self.data.rooms)
+            self.async_update_listeners()
+        lock = self._setpoint_locks.setdefault(room_id, asyncio.Lock())
+        async with lock:
+            if self._setpoints.get(room_id) is not pending:
+                return  # A newer setpoint came in while waiting; that one is sent.
+            try:
+                await self._send(
+                    "PATCH",
+                    f"/api/rooms/{room_id}",
+                    {"id": room_id, "setpoint": {"temperature": temperature}},
+                )
+            except HomeAssistantError:
+                if self._setpoints.get(room_id) is pending:
+                    del self._setpoints[room_id]
+                await self._setpoint_refresh.async_call()
+                raise
+            pending.sent_at = dt_util.utcnow()
+        await self._setpoint_refresh.async_call()
+
+    def _show_setpoints(self, rooms: dict[int, dict[str, Any]]) -> None:
+        """Put setpoints set from Home Assistant on rooms read from the CC."""
+        now = dt_util.utcnow()
+        for room_id, pending in list(self._setpoints.items()):
+            room = rooms.get(room_id)
+            if room is None:
+                del self._setpoints[room_id]
+                continue
+            setpoint = room.get("setpoint") or {}
+            if pending.sent_at is not None and (
+                setpoint.get("temperature") == pending.temperature
+                or now - pending.sent_at >= SETPOINT_HOLD
+            ):
+                # The CC shows it, or kept another value: from now on its value wins.
+                del self._setpoints[room_id]
+                continue
+            room["setpoint"] = {**setpoint, "temperature": pending.temperature}
+
+    def forget_setpoints(self) -> None:
+        """Stop holding setpoints the CC accepted, as a mode change may replace them."""
+        for room_id, pending in list(self._setpoints.items()):
+            if pending.sent_at is not None:
+                del self._setpoints[room_id]
+
     async def async_write(self, method: str, uri: str, content: dict[str, Any]) -> None:
         """Send a change to the CC, then refresh."""
         await self.async_send(method, uri, content)
+        self.forget_setpoints()
         # Not debounced: the UI should show what the CC accepted right away.
         await self.async_refresh()
 
@@ -344,4 +430,5 @@ class DanfossLinkCoordinator(DataUpdateCoordinator[DanfossLinkData]):
 
     async def async_close(self) -> None:
         self.planned_pause.async_stop()
+        self._setpoint_refresh.async_shutdown()
         await self._call(self.client.close)

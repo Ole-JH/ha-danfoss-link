@@ -102,4 +102,5 @@ class DanfossLinkRoomEntity(CoordinatorEntity[DanfossLinkCoordinator]):
             and not set(at_home.get("rooms") or []).issuperset(rooms)
         ):
             await coordinator.async_start_at_home(sorted(coordinator.data.rooms), restart=True)
+        coordinator.forget_setpoints()
         await coordinator.async_refresh()
