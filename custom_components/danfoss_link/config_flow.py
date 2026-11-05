@@ -8,7 +8,12 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.config_entries import (
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+    OptionsFlowWithReload,
+)
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.selector import (
@@ -252,8 +257,8 @@ class DanfossLinkConfigFlow(ConfigFlow, domain=DOMAIN):
         return DanfossLinkOptionsFlow()
 
 
-class DanfossLinkOptionsFlow(OptionsFlow):
-    """Polling interval and alarm notifications."""
+class DanfossLinkOptionsFlow(OptionsFlowWithReload):
+    """Polling interval and alarm notifications (the entry reloads when they change)."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:

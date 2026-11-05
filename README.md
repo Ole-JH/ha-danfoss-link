@@ -22,7 +22,7 @@ confirmed working against a real Link CC.
 
 ## Quick start
 
-You need Home Assistant 2025.7 or newer with [HACS](https://hacs.xyz), and a Link CC
+You need Home Assistant 2025.10 or newer with [HACS](https://hacs.xyz), and a Link CC
 that is online. You don't need your phone or the Danfoss Link app.
 
 1. **Add the repository to HACS.** Click the first blue button above (or in HACS go to
@@ -155,6 +155,6 @@ Everything else, including debug logging, is in
   pairing, using the identity of a paired Android app.
 - [How it works](docs/how-it-works.md): the cloud relay, pairing details, known
   limitations and cloud-free alternatives.
-- [Development](docs/development.md): running the tests and linters.
+- [Development](docs/development.md): the dev container, running the tests and linters.
 - Protocol notes: [protocol.md](docs/protocol.md) and
   [connection-spec.md](docs/connection-spec.md).

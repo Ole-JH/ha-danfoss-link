@@ -1,0 +1,5 @@
+# Dev container and HA 2026.11+ test dependencies. Home Assistant and
+# pytest-homeassistant are installed by scripts/setup, which pins them together.
+ecdsa==0.19.2
+asn1crypto==1.5.1
+ruff
