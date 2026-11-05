@@ -15,6 +15,7 @@ import socket
 import ssl
 import struct
 import threading
+import time
 from typing import Any
 
 from ecdsa.curves import NIST256p
@@ -190,6 +191,10 @@ class FakeMDG:
         self.place_call_result = 0
         self.send_ping = False
         self.reject_writes = False
+        # Seconds each write takes, like a round trip through the real relay.
+        self.write_delay = 0.0
+        # Accept setpoint changes but keep reporting the old setpoint.
+        self.ignore_setpoints = False
         self.send_unrelated_message = False
         self.tunnels_opened = 0
         self.control_connections = 0
@@ -446,6 +451,8 @@ class FakeMDG:
 
     def _handle(self, method: str, uri: str, content: Any) -> tuple[int, Any]:
         self.requests.append((method, uri, content))
+        if method != "GET" and self.write_delay:
+            time.sleep(self.write_delay)
         if method != "GET" and self.reject_writes:
             return 400, {"errorMessages": ["JSON content does not conform to JSON Schema."]}
         if method == "GET":
@@ -475,6 +482,8 @@ class FakeMDG:
                             ]
                         }
                     for key, value in content.items():
+                        if key == "setpoint" and self.ignore_setpoints:
+                            continue
                         if isinstance(value, dict):
                             room.setdefault(key, {}).update(value)
                         else:

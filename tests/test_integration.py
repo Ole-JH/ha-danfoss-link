@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 import functools
@@ -32,10 +33,11 @@ from homeassistant.const import (
     CONF_SCAN_INTERVAL,
     SERVICE_TURN_ON,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 import voluptuous as vol
@@ -395,6 +397,127 @@ async def test_set_temperature(hass: HomeAssistant, fake: FakeMDG) -> None:
     )
     await hass.async_block_till_done()
     assert hass.states.get("climate.living_room").attributes[ATTR_TEMPERATURE] == 19.5
+
+
+def _setpoints_sent(fake: FakeMDG, room_id: int) -> list[float]:
+    return [
+        content["setpoint"]["temperature"]
+        for method, uri, content in fake.requests
+        if method == "PATCH" and uri == f"/api/rooms/{room_id}" and "setpoint" in content
+    ]
+
+
+async def test_rapid_setpoint_presses(hass: HomeAssistant, fake: FakeMDG) -> None:
+    """+/- pressed quickly: each press shows at once, and only the last waits to be sent."""
+    await _setup(hass)
+    fake.write_delay = 0.3
+    entity = "climate.living_room"
+    shown: list[float] = []
+
+    @callback
+    def record(event: Any) -> None:
+        state = event.data["new_state"]
+        if event.data["entity_id"] == entity and state is not None:
+            shown.append(state.attributes.get(ATTR_TEMPERATURE))
+
+    unsub = hass.bus.async_listen("state_changed", record)
+    calls = []
+    for temperature in (21.5, 22.0, 22.5, 23.0):
+        calls.append(
+            hass.async_create_task(
+                hass.services.async_call(
+                    CLIMATE_DOMAIN,
+                    SERVICE_SET_TEMPERATURE,
+                    {ATTR_ENTITY_ID: entity, ATTR_TEMPERATURE: temperature},
+                    blocking=True,
+                )
+            )
+        )
+        await asyncio.sleep(0.05)
+        assert hass.states.get(entity).attributes[ATTR_TEMPERATURE] == temperature
+    await asyncio.gather(*calls)
+    # The first press went out at once; the two in between were replaced
+    # before they were sent.
+    assert _setpoints_sent(fake, 0) == [21.5, 23.0]
+    # The CC is read back once, after the presses, and the display never moved back.
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=3))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await hass.async_block_till_done()
+    assert hass.states.get(entity).attributes[ATTR_TEMPERATURE] == 23.0
+    unsub()
+    assert shown == sorted(shown)
+    assert fake.state["/api/rooms"][0]["setpoint"]["temperature"] == 23.0
+
+
+async def test_rapid_at_home_temperature_presses(hass: HomeAssistant, fake: FakeMDG) -> None:
+    """The same for the at-home temperature number (a tile card with +/- buttons)."""
+    await _setup(hass)
+    fake.write_delay = 0.3
+    entity = "number.living_room_at_home_temperature"
+    calls = []
+    for value in (22.5, 23.0, 23.5):
+        calls.append(
+            hass.async_create_task(
+                hass.services.async_call(
+                    NUMBER_DOMAIN,
+                    SERVICE_SET_VALUE,
+                    {ATTR_ENTITY_ID: entity, "value": value},
+                    blocking=True,
+                )
+            )
+        )
+        await asyncio.sleep(0.05)
+        assert float(hass.states.get(entity).state) == value
+    await asyncio.gather(*calls)
+    sent = [
+        content["regulation"]["atHomeSetpoint"]
+        for method, uri, content in fake.requests
+        if method == "PATCH" and uri == "/api/rooms/0" and "regulation" in content
+    ]
+    assert sent == [22.5, 23.5]
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=3))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await hass.async_block_till_done()
+    assert float(hass.states.get(entity).state) == 23.5
+    assert fake.state["/api/rooms"][0]["regulation"]["atHomeSetpoint"] == 23.5
+
+
+async def test_stale_poll_keeps_new_setpoint(hass: HomeAssistant, fake: FakeMDG, freezer) -> None:
+    """A poll that still has the old setpoint does not move the display back, for a while."""
+    entry = await _setup(hass)
+    fake.ignore_setpoints = True
+    entity = "climate.living_room"
+    await hass.services.async_call(
+        CLIMATE_DOMAIN,
+        SERVICE_SET_TEMPERATURE,
+        {ATTR_ENTITY_ID: entity, ATTR_TEMPERATURE: 19.5},
+        blocking=True,
+    )
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(entity).attributes[ATTR_TEMPERATURE] == 19.5
+    # The CC still reports 21 half a minute later: show what it has.
+    freezer.tick(timedelta(seconds=31))
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(entity).attributes[ATTR_TEMPERATURE] == 21.0
+
+
+async def test_rejected_setpoint_shows_cc_value(hass: HomeAssistant, fake: FakeMDG) -> None:
+    await _setup(hass)
+    fake.reject_writes = True
+    entity = "climate.living_room"
+    with pytest.raises(HomeAssistantError, match="HTTP 400"):
+        await hass.services.async_call(
+            CLIMATE_DOMAIN,
+            SERVICE_SET_TEMPERATURE,
+            {ATTR_ENTITY_ID: entity, ATTR_TEMPERATURE: 19.5},
+            blocking=True,
+        )
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=3))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await hass.async_block_till_done()
+    assert hass.states.get(entity).attributes[ATTR_TEMPERATURE] == 21.0
 
 
 async def test_set_hvac_mode(hass: HomeAssistant, fake: FakeMDG) -> None:

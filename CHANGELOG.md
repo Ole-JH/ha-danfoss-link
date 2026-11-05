@@ -4,6 +4,18 @@ Each release's GitHub release notes are taken from its section below. Add a
 `## <version>` section matching the version in `manifest.json` before the
 release PR to `main` is merged.
 
+## 0.4.1
+
+A small fix for changing temperatures with the + and - buttons.
+
+### Fixes
+
+- **The temperature now stays where you put it.** When you pressed + or - a few times in a row, the temperature you picked would slowly step back down (or up) by itself a few seconds later. That's fixed: the new temperature shows right away and stays put. This works the same for a thermostat and for a room's at-home and away temperatures.
+
+### Upgrading
+
+Update in HACS and restart Home Assistant. Nothing else to do: your entities, dashboards and automations stay as they are.
+
 ## 0.4.0
 
 You can now see and change the weekly schedule, and pause the heating, right from Home Assistant. Two new dashboard cards come with the integration, so there is nothing extra to install.

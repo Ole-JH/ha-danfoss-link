@@ -18,7 +18,9 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .coordinator import DanfossLinkConfigEntry, DanfossLinkCoordinator
 from .entity import DanfossLinkEntity, DanfossLinkRoomEntity
 
-PARALLEL_UPDATES = 1
+# The coordinator serialises all traffic to the CC. Let set_value calls in, so
+# a +/- press can replace one that is still waiting to be sent.
+PARALLEL_UPDATES = 0
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -92,10 +94,8 @@ class DanfossLinkRoomSetpoint(DanfossLinkRoomEntity, _SetpointNumber):
         return self.room.get("maxSetpoint") or 35.0
 
     async def async_set_native_value(self, value: float) -> None:
-        await self.coordinator.async_write(
-            "PATCH",
-            self.room_uri,
-            {"id": self.room_id, "regulation": {self.entity_description.regulation_key: value}},
+        await self.coordinator.async_set_room_value(
+            self.room_id, "regulation", self.entity_description.regulation_key, value
         )
 
 
