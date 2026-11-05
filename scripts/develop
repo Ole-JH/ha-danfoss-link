@@ -9,5 +9,6 @@ if [[ ! -f config/configuration.yaml ]]; then
 fi
 
 # Load custom_components/danfoss_link straight from the checkout.
-export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$PWD/custom_components"
+mkdir -p config/custom_components
+ln -sfn ../../custom_components/danfoss_link config/custom_components/danfoss_link
 exec hass --config "$PWD/config" --debug
