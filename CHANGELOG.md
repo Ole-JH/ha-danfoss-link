@@ -4,11 +4,17 @@ Each release's GitHub release notes are taken from its section below. Add a
 `## <version>` section matching the version in `manifest.json` before the
 release PR to `main` is merged.
 
-## Unreleased
+## 0.4.1
+
+A small fix for changing temperatures with the + and - buttons.
 
 ### Fixes
 
-- **+/- no longer jumps back.** Pressing + or - several times on a thermostat, or on a room's at-home or away temperature, now shows each new temperature at once and keeps it. Before, the shown temperature walked back a few steps a few seconds later, because each press waited for its own slow round trip to the Danfoss controller. Only the last press of a quick series is sent, and the controller is read back once you stop.
+- **The temperature now stays where you put it.** When you pressed + or - a few times in a row, the temperature you picked would slowly step back down (or up) by itself a few seconds later. That's fixed: the new temperature shows right away and stays put. This works the same for a thermostat and for a room's at-home and away temperatures.
+
+### Upgrading
+
+Update in HACS and restart Home Assistant. Nothing else to do: your entities, dashboards and automations stay as they are.
 
 ## 0.4.0
 
