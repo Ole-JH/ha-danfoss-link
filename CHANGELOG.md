@@ -11,12 +11,10 @@ Ready for Home Assistant 2026.11.
 ### Fixes
 
 - **Works cleanly on Home Assistant 2026.11.** The thermostats no longer put warnings in the log about features Home Assistant is phasing out.
-- **Changing the integration's settings keeps working after Home Assistant 2026.12.** When you change the update interval or alarm notifications under **Configure**, the integration still reloads with your new settings.
-- **HACS now tells you which Home Assistant you need: 2025.10 or newer.** That has been true since 0.4.0, but HACS said 2025.7, so an older Home Assistant could install a version that doesn't work on it.
 
 ### Upgrading
 
-Update in HACS and restart Home Assistant. Nothing else to do: your entities, dashboards and automations stay as they are. On a Home Assistant older than 2025.10, update Home Assistant first.
+Update in HACS and restart Home Assistant. Nothing else to do: your entities, dashboards and automations stay as they are.
 
 ## 0.4.1
 
