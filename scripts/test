@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Lint and run the test suite, as CI does.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+ruff check .
+ruff format --check .
+pytest -q "$@"

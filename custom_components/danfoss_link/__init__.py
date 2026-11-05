@@ -77,17 +77,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: DanfossLinkConfigEntry) 
         .async_get_or_create(config_entry_id=entry.entry_id, **controller_device_info(coordinator))
         .id
     )
-    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     if entry.options.get(CONF_ALARM_NOTIFICATIONS, True):
         notifier = AlarmNotifier(hass, coordinator)
         notifier.async_start()
         entry.async_on_unload(notifier.async_stop)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
-
-
-async def _async_options_updated(hass: HomeAssistant, entry: DanfossLinkConfigEntry) -> None:
-    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: DanfossLinkConfigEntry) -> bool:

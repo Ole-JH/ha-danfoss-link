@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Run Home Assistant on http://localhost:8123 with this integration loaded.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+mkdir -p config
+if [[ ! -f config/configuration.yaml ]]; then
+  hass --config "$PWD/config" --script ensure_config
+fi
+
+# Load custom_components/danfoss_link straight from the checkout.
+mkdir -p config/custom_components
+ln -sfn ../../custom_components/danfoss_link config/custom_components/danfoss_link
+exec hass --config "$PWD/config" --debug

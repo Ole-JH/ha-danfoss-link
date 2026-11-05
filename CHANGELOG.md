@@ -4,6 +4,13 @@ Each release's GitHub release notes are taken from its section below. Add a
 `## <version>` section matching the version in `manifest.json` before the
 release PR to `main` is merged.
 
+## Unreleased
+
+### Fixes
+
+- **Ready for Home Assistant 2026.11.** The thermostats no longer log deprecation warnings on 2026.11, and changing the integration's options keeps working after Home Assistant 2026.12.
+- **Home Assistant 2025.10 or newer is now required.** Version 0.4.0 already needed it; HACS now says so before you install.
+
 ## 0.4.1
 
 A small fix for changing temperatures with the + and - buttons.

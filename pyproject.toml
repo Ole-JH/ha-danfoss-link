@@ -2,6 +2,9 @@
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+# Home Assistant 2026.11 aliases httpx to httpx2 on import; respx's pytest plugin
+# would import httpx first. No test uses the plugin.
+addopts = "-p no:respx"
 
 [tool.ruff]
 line-length = 100

@@ -1,0 +1,12 @@
+# Home Assistant config for the dev container (scripts/develop).
+default_config:
+
+homeassistant:
+  name: Danfoss Link dev
+  unit_system: metric
+  time_zone: Europe/Copenhagen
+
+logger:
+  default: info
+  logs:
+    custom_components.danfoss_link: debug
