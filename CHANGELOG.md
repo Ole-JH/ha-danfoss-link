@@ -4,12 +4,19 @@ Each release's GitHub release notes are taken from its section below. Add a
 `## <version>` section matching the version in `manifest.json` before the
 release PR to `main` is merged.
 
-## Unreleased
+## 0.4.2
+
+Ready for Home Assistant 2026.11.
 
 ### Fixes
 
-- **Ready for Home Assistant 2026.11.** The thermostats no longer log deprecation warnings on 2026.11, and changing the integration's options keeps working after Home Assistant 2026.12.
-- **Home Assistant 2025.10 or newer is now required.** Version 0.4.0 already needed it; HACS now says so before you install.
+- **Works cleanly on Home Assistant 2026.11.** The thermostats no longer put warnings in the log about features Home Assistant is phasing out.
+- **Changing the integration's settings keeps working after Home Assistant 2026.12.** When you change the update interval or alarm notifications under **Configure**, the integration still reloads with your new settings.
+- **HACS now tells you which Home Assistant you need: 2025.10 or newer.** That has been true since 0.4.0, but HACS said 2025.7, so an older Home Assistant could install a version that doesn't work on it.
+
+### Upgrading
+
+Update in HACS and restart Home Assistant. Nothing else to do: your entities, dashboards and automations stay as they are. On a Home Assistant older than 2025.10, update Home Assistant first.
 
 ## 0.4.1
 

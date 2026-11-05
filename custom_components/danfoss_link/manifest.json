@@ -17,5 +17,5 @@
     "ecdsa==0.19.2",
     "asn1crypto==1.5.1"
   ],
-  "version": "0.4.1"
+  "version": "0.4.2"
 }
