@@ -39,7 +39,6 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util import dt as dt_util
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 import voluptuous as vol
 
 from custom_components.danfoss_link import coordinator as coordinator_module
@@ -59,6 +58,7 @@ from custom_components.danfoss_link.const import (
 )
 from custom_components.danfoss_link.diagnostics import async_get_config_entry_diagnostics
 
+from .common import MockConfigEntry, async_fire_time_changed
 from .fake_mdg import FIXTURES, PAIR_ID, PAIR_PASSWORD, PAIRING_CODE, FakeMDG
 
 PEER_ID = "e7:af:e3:77:61:90:0d:b5:1f:87:d9:7c:ea:da:10:1e:25:26:9b:a1"
@@ -186,7 +186,9 @@ async def test_user_flow_already_configured(hass: HomeAssistant, fake: FakeMDG) 
     assert result["reason"] == "already_configured"
 
 
-async def test_reconfigure(hass: HomeAssistant, fake: FakeMDG) -> None:
+async def test_reconfigure(
+    hass: HomeAssistant, fake: FakeMDG, caplog: pytest.LogCaptureFixture
+) -> None:
     entry = await _setup(hass)
     result = await entry.start_reconfigure_flow(hass)
     assert result["type"] is FlowResultType.FORM
@@ -198,6 +200,8 @@ async def test_reconfigure(hass: HomeAssistant, fake: FakeMDG) -> None:
     result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
     assert result["reason"] == "reconfigure_successful"
     await hass.async_block_till_done()
+    # The flow reloads the entry; a reload from an update listener too breaks in 2026.12.
+    assert "update listener" not in caplog.text
 
 
 async def test_options_flow(hass: HomeAssistant, fake: FakeMDG) -> None:
@@ -215,9 +219,13 @@ async def test_options_flow(hass: HomeAssistant, fake: FakeMDG) -> None:
 # ------------------------------------------------------------------- setup
 
 
-async def test_setup_creates_entities(hass: HomeAssistant, fake: FakeMDG) -> None:
+async def test_setup_creates_entities(
+    hass: HomeAssistant, fake: FakeMDG, caplog: pytest.LogCaptureFixture
+) -> None:
     entry = await _setup(hass)
     assert entry.state is ConfigEntryState.LOADED
+    # No entity uses an API Home Assistant has deprecated.
+    assert "deprecated" not in caplog.text
 
     living = hass.states.get("climate.living_room")
     assert living.state == HVACMode.AUTO

@@ -44,7 +44,7 @@ class DanfossLinkRoomClimate(DanfossLinkRoomEntity, ClimateEntity):
 
     _attr_name = None
     _attr_translation_key = "room"
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_target_temperature_step = 0.5
     _attr_hvac_modes = [HVACMode.AUTO, HVACMode.HEAT]
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
@@ -53,12 +53,26 @@ class DanfossLinkRoomClimate(DanfossLinkRoomEntity, ClimateEntity):
         super().__init__(coordinator, room_id, "climate")
 
     @property
-    def current_temperature(self) -> float | None:
+    def native_current_temperature(self) -> float | None:
         return self.room.get("ambientTemperature")
 
     @property
-    def target_temperature(self) -> float | None:
+    def native_target_temperature(self) -> float | None:
         return (self.room.get("setpoint") or {}).get("temperature")
+
+    # Home Assistant 2026.11 renamed these to native_*. Older releases still
+    # read the old names, so provide them there (and only there: 2026.11 logs a
+    # deprecation warning for an entity that defines them).
+    if not hasattr(ClimateEntity, "native_current_temperature"):
+        _attr_temperature_unit = UnitOfTemperature.CELSIUS
+
+        @property
+        def current_temperature(self) -> float | None:
+            return self.native_current_temperature
+
+        @property
+        def target_temperature(self) -> float | None:
+            return self.native_target_temperature
 
     @property
     def min_temp(self) -> float:

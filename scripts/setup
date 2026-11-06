@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Install Home Assistant and the test tools (the dev container runs this once).
+#
+#   scripts/setup                          # the Home Assistant release we target
+#   HA_VERSION=2026.12.0b0 scripts/setup   # try a beta before it ships
+#
+# From 2026.11 Home Assistant publishes its own test package,
+# pytest-homeassistant, with one release per Home Assistant release. Its
+# release can lag Home Assistant's by a day or two, so this takes the newest
+# one of the same month (a beta if that is all there is) and pins Home
+# Assistant itself to HA_VERSION.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+HA_VERSION="${HA_VERSION:-2026.11.0}"
+month="$(cut -d. -f1-2 <<<"$HA_VERSION")"
+next_month="$(python3 -c "y, m = map(int, '$month'.split('.')); print(f'{y + m // 12}.{m % 12 + 1}')")"
+
+# Everything goes into a virtualenv, .venv in the checkout unless one is active.
+export VIRTUAL_ENV="${VIRTUAL_ENV:-$PWD/.venv}"
+python3 -m pip install --quiet --user --upgrade uv
+[[ -x "$VIRTUAL_ENV/bin/python" ]] || python3 -m uv venv --python 3.14 "$VIRTUAL_ENV"
+
+python3 -m uv pip install --python "$VIRTUAL_ENV/bin/python" --prerelease=allow \
+  --override <(echo "homeassistant==$HA_VERSION") \
+  "homeassistant==$HA_VERSION" \
+  "pytest-homeassistant>=${month}.0b0,<${next_month}.0b0" \
+  -r requirements_dev.txt
+
+"$VIRTUAL_ENV/bin/python" -c "from homeassistant.const import __version__; print('Home Assistant', __version__)"

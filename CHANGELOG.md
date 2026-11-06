@@ -4,6 +4,18 @@ Each release's GitHub release notes are taken from its section below. Add a
 `## <version>` section matching the version in `manifest.json` before the
 release PR to `main` is merged.
 
+## 0.4.2
+
+Ready for Home Assistant 2026.11.
+
+### Fixes
+
+- **Works cleanly on Home Assistant 2026.11.** The thermostats no longer put warnings in the log about features Home Assistant is phasing out.
+
+### Upgrading
+
+Update in HACS and restart Home Assistant. Nothing else to do: your entities, dashboards and automations stay as they are.
+
 ## 0.4.1
 
 A small fix for changing temperatures with the + and - buttons.

@@ -21,12 +21,31 @@ jobs:
           category: integration
 
   tests:
+    name: tests (HA ${{ matrix.ha }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The oldest release hacs.json allows.
+          - ha: "2025.10.0"
+            python: "3.13"
+            install: >-
+              pip install pytest-homeassistant-custom-component==0.13.285 "pycares<5"
+              -r requirements_dev.txt
+          # The newest release pytest-homeassistant-custom-component supports.
+          - ha: latest (custom-component test package)
+            python: "3.14"
+            install: pip install -r requirements_test.txt
+          # Home Assistant 2026.11+, with its own pytest-homeassistant package.
+          - ha: "2026.11.0"
+            python: "3.14"
+            install: HA_VERSION=2026.11.0 scripts/setup && echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
-      - run: pip install -r requirements_test.txt
-      - run: ruff check . && ruff format --check .
-      - run: pytest -q
+          python-version: ${{ matrix.python }}
+      - run: ${{ matrix.install }}
+      - run: python -c "from homeassistant.const import __version__; print(__version__)"
+      - run: scripts/test

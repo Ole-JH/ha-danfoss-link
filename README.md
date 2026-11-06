@@ -4,7 +4,7 @@
 
 # Danfoss Link for Home Assistant
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ole-JH&repository=ha-danfoss-link&category=integration)
+[![Open your Home Assistant instance and open this repository in the Marketplace (or HACS on older versions).](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ole-JH&repository=ha-danfoss-link&category=integration)
 [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=danfoss_link)
 
 Control a **Danfoss Link CC** (central controller) and everything paired to it
@@ -22,13 +22,19 @@ confirmed working against a real Link CC.
 
 ## Quick start
 
-You need Home Assistant 2025.7 or newer with [HACS](https://hacs.xyz), and a Link CC
-that is online. You don't need your phone or the Danfoss Link app.
+You need Home Assistant 2025.10 or newer and a Link CC that is online. You don't need
+your phone or the Danfoss Link app.
 
-1. **Add the repository to HACS.** Click the first blue button above (or in HACS go to
-   ⋮ → Custom repositories and add `https://github.com/Ole-JH/ha-danfoss-link` as an
-   *Integration*).
-2. **Download** Danfoss Link in HACS, then **restart Home Assistant**.
+1. **Add the repository.** Click the first blue button above. It opens the
+   Marketplace on Home Assistant 2026.11 and newer, and HACS on older versions.
+   Or add it by hand:
+   - *Home Assistant 2026.11 or newer:* Settings → **Marketplace** → **Add from link**
+     (upper right), enter `Ole-JH/ha-danfoss-link` and select **Add**. The Marketplace
+     asks you to connect GitHub the first time you add a repository.
+   - *Home Assistant 2026.10 or older:* in [HACS](https://hacs.xyz) go to
+     ⋮ → Custom repositories and add `https://github.com/Ole-JH/ha-danfoss-link` as an
+     *Integration*.
+2. **Download** Danfoss Link, then **restart Home Assistant**.
 3. **Add the integration.** Click the second blue button above (or Settings → Devices &
    services → Add integration → **Danfoss Link**) and choose
    **Pair with the code from the CC**.
@@ -42,6 +48,10 @@ that is online. You don't need your phone or the Danfoss Link app.
 That's it. If a step fails, see [Troubleshooting](docs/troubleshooting.md). If pairing
 doesn't work for you at all, you can [use exported app credentials](docs/exported-credentials.md)
 instead.
+
+**Already installed with HACS?** Nothing to do. When you update Home Assistant to
+2026.11, the Marketplace takes over the repository and keeps offering Danfoss Link
+updates, with the same update entity.
 
 **Manual install:** copy `custom_components/danfoss_link` into your
 `config/custom_components/` and restart Home Assistant.
@@ -155,6 +165,6 @@ Everything else, including debug logging, is in
   pairing, using the identity of a paired Android app.
 - [How it works](docs/how-it-works.md): the cloud relay, pairing details, known
   limitations and cloud-free alternatives.
-- [Development](docs/development.md): running the tests and linters.
+- [Development](docs/development.md): the dev container, running the tests and linters.
 - Protocol notes: [protocol.md](docs/protocol.md) and
   [connection-spec.md](docs/connection-spec.md).
