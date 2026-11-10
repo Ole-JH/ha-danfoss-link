@@ -77,8 +77,8 @@ it in an area.
 | `button` mark alarms as read | CC | Marks every unread alarm as read, as opening it in the app does |
 | `binary_sensor` living zone | room | On when the room is in the living zone. Its rooms share one Schedule/Manual mode and one schedule, so changing one changes all. |
 | `sensor` living zone | CC | How many rooms are in the living zone, with the rooms, the zone's mode and schedule as attributes |
-| `binary_sensor` battery | room | Low battery on a device in the room, from the CC's alarms. *Disabled by default.* |
-| `binary_sensor` radio connection | room | Off when the CC has lost contact with a device in the room. *Disabled by default.* |
+| `binary_sensor` battery | room | Low battery on a device in the room, from the CC's alarms. The `devices` attribute names the thermostats with a low battery (`critical_devices` those that are critical). *Disabled by default.* |
+| `binary_sensor` radio connection | room | Off when the CC has lost contact with a device in the room; the `devices` attribute names them. *Disabled by default.* |
 | `sensor` outdoor temperature | CC | Outdoor temperature. Only created if the CC reports one; not every setup has an outdoor sensor. |
 | `sensor` Wi-Fi signal | CC | The CC's Wi-Fi signal strength. *Disabled by default.* Only created if the CC reports it; firmware 4.2.1797 does not. |
 

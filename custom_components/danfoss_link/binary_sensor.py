@@ -55,6 +55,21 @@ class _RoomAlarmSensor(DanfossLinkRoomEntity, BinarySensorEntity):
             if str(alarm.get("room")) == room and alarm.get("titleTextId") in titles
         ]
 
+    def _devices(self, *titles: str) -> list[str]:
+        """Names of the devices these alarms are about, without duplicates.
+
+        The alarm's node reads "<address>|<device name>"; keep only the name.
+        """
+        names: list[str] = []
+        for alarm in self._alarms(*titles):
+            node = alarm.get("node")
+            if node in (None, ""):
+                continue
+            name = str(node).split("|")[-1].strip() or str(node)
+            if name not in names:
+                names.append(name)
+        return names
+
 
 class DanfossLinkRoomBattery(_RoomAlarmSensor):
     """On when a thermostat in the room reports a low or critical battery."""
@@ -72,7 +87,11 @@ class DanfossLinkRoomBattery(_RoomAlarmSensor):
     def extra_state_attributes(self) -> dict[str, Any]:
         critical = bool(self._alarms(ALARM_BATTERY_CRITICAL))
         low = bool(self._alarms(ALARM_BATTERY_LOW))
-        return {"battery_state": "critical" if critical else "low" if low else "ok"}
+        return {
+            "battery_state": "critical" if critical else "low" if low else "ok",
+            "devices": self._devices(ALARM_BATTERY_LOW, ALARM_BATTERY_CRITICAL),
+            "critical_devices": self._devices(ALARM_BATTERY_CRITICAL),
+        }
 
 
 class DanfossLinkRoomConnectivity(_RoomAlarmSensor):
@@ -87,6 +106,10 @@ class DanfossLinkRoomConnectivity(_RoomAlarmSensor):
     @property
     def is_on(self) -> bool:
         return not self._alarms(ALARM_NODE_DEAD)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"devices": self._devices(ALARM_NODE_DEAD)}
 
 
 class DanfossLinkRoomLivingZone(DanfossLinkRoomEntity, BinarySensorEntity):
