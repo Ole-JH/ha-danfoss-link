@@ -139,6 +139,9 @@ More in [docs/how-it-works.md](docs/how-it-works.md).
   schedule.
 - **Cloud pairing only.** Local-network pairing codes (starting with `0000`) are not
   supported.
+- **One reading per room.** The CC reports one temperature per room, even when the room
+  has several thermostats, and no battery levels at all. Low batteries only show up as
+  alarms, which feed each room's battery sensor. The Danfoss app has the same limits.
 - **Tested on one setup so far.** Message formats come from reverse engineering, so
   other device mixes may behave differently. Please open an issue with debug logs if
   something doesn't work with your CC.

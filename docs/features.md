@@ -167,6 +167,7 @@ How the integration compares with the Danfoss Link app (1.3.x).
 | Schedule / Manual per room | ✅ | Thermostat Auto/Heat and the room's Mode select |
 | At-home / away temperatures | ✅ | Number entities per room |
 | Living zone (shared mode for its rooms) | ✅ | Mode changes are sent to the whole zone; living zone sensor |
+| Temperature or battery level per thermostat | ❌ | Not possible: the CC reports one temperature per room and no battery levels (not in the app either). Low and critical battery alarms feed the room's battery sensor |
 | Change which rooms are in the living zone | ❌ | Tried and not possible: the CC refuses it over the network (not in the app either). Only on the CC's display |
 | House modes: at home, vacation, pause, boost | ✅ | House mode select and house state sensor |
 | Pause with an end time, planned pause | ✅ | `pause` / `cancel_pause` actions and the pause & vacation card |
