@@ -47,12 +47,16 @@ class _RoomAlarmSensor(DanfossLinkRoomEntity, BinarySensorEntity):
     _attr_entity_registry_enabled_default = False
 
     def _alarms(self, *titles: str) -> list[dict[str, Any]]:
-        # The CC sends the room id as a number, the app reads it as a string.
-        room = str(self.room_id)
+        # Most CCs send the room id (as a number or a string), but some
+        # firmware (seen on 4.2.1724) sends the room's name instead.
+        keys = {str(self.room_id)}
+        if name := str(self.room.get("name") or "").strip():
+            keys.add(name.casefold())
         return [
             alarm
             for alarm in self.coordinator.data.alarms
-            if str(alarm.get("room")) == room and alarm.get("titleTextId") in titles
+            if str(alarm.get("room")).strip().casefold() in keys
+            and alarm.get("titleTextId") in titles
         ]
 
     def _devices(self, *titles: str) -> list[str]:

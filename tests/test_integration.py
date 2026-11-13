@@ -313,6 +313,27 @@ async def test_alarm_sensors_name_devices(hass: HomeAssistant, fake: FakeMDG) ->
     assert living.attributes["devices"] == []
 
 
+async def test_alarm_sensors_match_room_name(hass: HomeAssistant, fake: FakeMDG) -> None:
+    """Some CC firmware puts the room's name in the alarm instead of its id."""
+    fake.state["/api/alarms"] = [
+        {"id": 3, "level": "Warning", "room": "Bathroom", "node": "AB-1|Radiator left",
+         "isRead": False, "titleTextId": "IDS_UA1_ALERTVIEWER_BATTERY_LOW_ALERT"},
+        {"id": 4, "level": "Warning", "room": "Bathroom", "node": "AB-2|Radiator right",
+         "isRead": False, "titleTextId": "IDS_UA1_ALERTVIEWER_NODE_DEAD_ALERT"},
+    ]  # fmt: skip
+    with patch(
+        "homeassistant.helpers.entity.Entity.entity_registry_enabled_default",
+        PropertyMock(return_value=True),
+    ):
+        await _setup(hass)
+    battery = hass.states.get("binary_sensor.bathroom_battery")
+    assert battery.state == "on"
+    assert battery.attributes["battery_state"] == "low"
+    assert battery.attributes["devices"] == ["Radiator left"]
+    assert hass.states.get("binary_sensor.bathroom_radio_connection").state == "off"
+    assert hass.states.get("binary_sensor.living_room_battery").state == "off"
+
+
 async def test_living_zone_sensor(hass: HomeAssistant, fake: FakeMDG) -> None:
     await _setup(hass)
     assert hass.states.get("binary_sensor.living_room_living_zone").state == "on"
