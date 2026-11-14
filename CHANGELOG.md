@@ -4,6 +4,22 @@ Each release's GitHub release notes are taken from its section below. Add a
 `## <version>` section matching the version in `manifest.json` before the
 release PR to `main` is merged.
 
+## 0.4.3
+
+Battery and radio alarms now work on more Danfoss controllers, and they tell you which thermostat needs attention.
+
+### Fixes
+
+- **Battery and radio alarms now show up on all controllers.** On some Danfoss controllers, a room's battery and radio connection sensors stayed at Normal even when the Danfoss app showed an alarm. They now turn on as they should.
+
+### Improvements
+
+- **See which thermostat needs new batteries.** A room's battery sensor now lists the thermostats with a low (or critical) battery, and the radio connection sensor lists the ones the controller has lost contact with. Handy when a room has more than one thermostat.
+
+### Upgrading
+
+Update in HACS and restart Home Assistant. Nothing else to do: your entities, dashboards and automations stay as they are.
+
 ## 0.4.2
 
 Ready for Home Assistant 2026.11.

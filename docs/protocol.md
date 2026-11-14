@@ -173,7 +173,11 @@ Battery and signal (APK 1.3.10 `GetSystemInfoResponse`, `GetAlarmsResponse`,
   `IDS_UA1_ALERTVIEWER_BATTERY_CRITICAL_ALERT`,
   `IDS_UA1_ALERTVIEWER_NODE_DEAD_ALERT` (device no longer answers).
 - Alarm `room` is read with `getString`, so it may arrive as a number or a
-  string; `node` is the device within the room.
+  string. Usually it is the room id, but a user on CC firmware 4.2.1724
+  reported the room's name instead (`"room": "Office"`, issue #13); the
+  battery and radio sensors match either. `node` is the device within the room. Seen live as
+  `"<address>|<device name>"` (e.g. `FT-016|Towel rail`); the battery and radio
+  sensors list the name part in their `devices` attribute.
 
 Alarms (APK 1.3.10 `GetAlarmsRequest`, `PatchAlarmRequest`, `GetAlarmsResponse`,
 `StatusActivity`; not yet seen live):

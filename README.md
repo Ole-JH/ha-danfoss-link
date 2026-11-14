@@ -77,8 +77,8 @@ it in an area.
 | `button` mark alarms as read | CC | Marks every unread alarm as read, as opening it in the app does |
 | `binary_sensor` living zone | room | On when the room is in the living zone. Its rooms share one Schedule/Manual mode and one schedule, so changing one changes all. |
 | `sensor` living zone | CC | How many rooms are in the living zone, with the rooms, the zone's mode and schedule as attributes |
-| `binary_sensor` battery | room | Low battery on a device in the room, from the CC's alarms. *Disabled by default.* |
-| `binary_sensor` radio connection | room | Off when the CC has lost contact with a device in the room. *Disabled by default.* |
+| `binary_sensor` battery | room | Low battery on a device in the room, from the CC's alarms. The `devices` attribute names the thermostats with a low battery (`critical_devices` those that are critical). *Disabled by default.* |
+| `binary_sensor` radio connection | room | Off when the CC has lost contact with a device in the room; the `devices` attribute names them. *Disabled by default.* |
 | `sensor` outdoor temperature | CC | Outdoor temperature. Only created if the CC reports one; not every setup has an outdoor sensor. |
 | `sensor` Wi-Fi signal | CC | The CC's Wi-Fi signal strength. *Disabled by default.* Only created if the CC reports it; firmware 4.2.1797 does not. |
 
@@ -139,6 +139,9 @@ More in [docs/how-it-works.md](docs/how-it-works.md).
   schedule.
 - **Cloud pairing only.** Local-network pairing codes (starting with `0000`) are not
   supported.
+- **One reading per room.** The CC reports one temperature per room, even when the room
+  has several thermostats, and no battery levels at all. Low batteries only show up as
+  alarms, which feed each room's battery sensor. The Danfoss app has the same limits.
 - **Tested on one setup so far.** Message formats come from reverse engineering, so
   other device mixes may behave differently. Please open an issue with debug logs if
   something doesn't work with your CC.
